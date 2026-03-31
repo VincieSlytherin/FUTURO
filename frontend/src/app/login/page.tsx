@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
+import FuturoLogo from "@/components/shared/FuturoLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,9 +30,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-futuro-500 mb-4 shadow-lg">
-            <span className="text-white text-2xl font-bold">F</span>
-          </div>
+          <FuturoLogo
+            size={56}
+            priority
+            className="mx-auto mb-4 h-14 w-14 rounded-2xl object-cover shadow-lg"
+          />
           <h1 className="text-2xl font-semibold text-gray-900">Futuro</h1>
           <p className="text-sm text-gray-500 mt-1">Your job search companion</p>
         </div>

@@ -5,6 +5,7 @@ import { Send, Loader2, Paperclip, Link } from "lucide-react";
 import { streamChat, intakeUrl } from "@/lib/api";
 import { useChatStore } from "@/lib/store";
 import MessageBubble from "@/components/chat/MessageBubble";
+import FuturoLogo from "@/components/shared/FuturoLogo";
 
 export default function ChatPage() {
   const [input, setInput]       = useState("");
@@ -116,9 +117,10 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-6 space-y-6">
         {isEmpty && (
           <div className="flex flex-col items-center justify-center h-full text-center gap-4 pb-12">
-            <div className="w-16 h-16 rounded-2xl bg-futuro-100 flex items-center justify-center">
-              <span className="text-futuro-500 text-3xl font-bold">F</span>
-            </div>
+            <FuturoLogo
+              size={64}
+              className="h-16 w-16 rounded-2xl object-cover shadow-sm"
+            />
             <div>
               <p className="text-gray-900 font-medium text-lg">Hey — I'm Futuro.</p>
               <p className="text-gray-500 text-sm mt-1 max-w-xs">

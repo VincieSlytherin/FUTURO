@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import ProviderStatus from "@/components/shared/ProviderStatus";
+import FuturoLogo from "@/components/shared/FuturoLogo";
 
 const NAV = [
   { href: "/chat",       label: "Chat",       icon: MessageSquare },
@@ -40,9 +41,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <aside className="w-56 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
         <div className="px-4 py-5 border-b border-gray-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-futuro-500 flex items-center justify-center shadow-sm">
-              <span className="text-white text-sm font-bold">F</span>
-            </div>
+            <FuturoLogo
+              size={32}
+              className="h-8 w-8 rounded-lg object-cover shadow-sm"
+            />
             <span className="font-semibold text-gray-900">Futuro</span>
           </div>
         </div>

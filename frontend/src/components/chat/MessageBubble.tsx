@@ -6,6 +6,7 @@ import clsx from "clsx";
 import type { Message } from "@/types";
 import MemoryUpdateCard from "./MemoryUpdateCard";
 import { useChatStore } from "@/lib/store";
+import FuturoLogo from "@/components/shared/FuturoLogo";
 
 interface Props {
   message: Message;
@@ -38,9 +39,10 @@ export default function MessageBubble({ message }: Props) {
   return (
     <div className="flex gap-3 max-w-[85%]">
       {/* Avatar */}
-      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-futuro-100 flex items-center justify-center mt-0.5">
-        <span className="text-futuro-600 text-xs font-bold">F</span>
-      </div>
+      <FuturoLogo
+        size={28}
+        className="mt-0.5 h-7 w-7 flex-shrink-0 rounded-full object-cover"
+      />
 
       <div className="flex-1 min-w-0">
         {/* Intent badge */}
