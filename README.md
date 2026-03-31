@@ -98,22 +98,22 @@ futuro/
 ```bash
 git clone https://github.com/your-username/futuro.git
 cd futuro
-make setup        # Creates .env, hashes password, runs migrations, inits memory repo
+make setup        # Creates .env, hashes password, installs deps, prepares local data dirs
 make dev          # Starts backend (port 8000) + frontend (port 3000)
 ```
 
 Open [http://localhost:3000](http://localhost:3000), log in, and run onboarding.
 
-See [docs/DEV_SETUP.md](docs/DEV_SETUP.md) for full setup instructions.
+See [docs/DEV_SETUP.md](/Users/ranju1008/Desktop/futuro/docs/DEV_SETUP.md) for full setup instructions. In the current repo snapshot, SQLite tables are created automatically on backend startup.
 
 ### Key `make` targets
 
 | Command | What it does |
 |---|---|
-| `make setup` | First-time setup (env, deps, DB, memory git repo) |
+| `make setup` | First-time setup (env, deps, local data dirs, memory git repo) |
 | `make dev` | Run backend + frontend in development mode |
 | `make test` | Run all tests |
-| `make migrate` | Run pending DB migrations |
+| `make migrate` | Explain current DB initialization behavior |
 | `make rebuild-index` | Rebuild ChromaDB vector index from stories_bank.md |
 | `make backup` | Archive data directory to a tarball |
 | `make docker-dev` | Run everything in Docker |

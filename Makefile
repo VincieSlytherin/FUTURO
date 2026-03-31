@@ -1,5 +1,5 @@
 .PHONY: setup dev dev-backend dev-frontend test test-backend \
-        rebuild-index backup restore deploy docker-dev docker-down deploy-secrets logs help
+        rebuild-index backup restore deploy docker-dev docker-down deploy-secrets logs help migrate migration
 
 BACKUP_DIR := backups
 DATA_DIR   := backend/data
@@ -9,7 +9,7 @@ help: ## Show this help
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-setup: ## First-time setup: env, secrets, deps, DB, memory repo
+setup: ## First-time setup: env, secrets, deps, local data dirs, memory repo
 	@echo "→ Setting up Futuro..."
 	@cp -n .env.example .env || true
 	@echo "\nGenerating JWT_SECRET..."
@@ -22,7 +22,6 @@ setup: ## First-time setup: env, secrets, deps, DB, memory repo
 	  sed -i.bak "s|USER_PASSWORD_HASH=.*|USER_PASSWORD_HASH=$$HASH|" .env && rm .env.bak
 	@cd backend && python -m venv .venv && .venv/bin/pip install -q -r requirements.txt
 	@cd frontend && npm install --silent
-	@cd backend && .venv/bin/alembic upgrade head
 	@mkdir -p $(DATA_DIR)/memory $(DATA_DIR)/chroma $(BACKUP_DIR)
 	@if [ ! -d "$(DATA_DIR)/memory/.git" ]; then \
 	  git -C $(DATA_DIR)/memory init && \
@@ -30,7 +29,7 @@ setup: ## First-time setup: env, secrets, deps, DB, memory repo
 	  git -C $(DATA_DIR)/memory config user.name "Futuro" && \
 	  git -C $(DATA_DIR)/memory commit --allow-empty -m "init memory repo"; \
 	fi
-	@echo "\n✓ Setup complete. Run 'make dev' to start."
+	@echo "\n✓ Setup complete. Run 'make dev' to start. The SQLite schema will be created automatically on backend startup."
 
 # ── Development ───────────────────────────────────────────────────────────────
 
@@ -58,11 +57,13 @@ test-frontend: ## Run frontend tests (jest)
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
-migrate: ## Run Alembic migrations
-	cd backend && .venv/bin/alembic upgrade head
+migrate: ## No-op: database tables are created automatically on backend startup
+	@echo "No Alembic migration files are checked into this repo."
+	@echo "Start the backend once and SQLAlchemy will create the SQLite tables automatically."
 
-migration: ## Generate a new migration (MSG="description")
-	cd backend && .venv/bin/alembic revision --autogenerate -m "$(MSG)"
+migration: ## No-op: Alembic is not configured in the current repo snapshot
+	@echo "Alembic is not configured in the current repo snapshot."
+	@echo "If you want migrations, add backend/alembic/, alembic.ini, and a migration workflow first."
 
 # ── Memory & Vector Store ─────────────────────────────────────────────────────
 
