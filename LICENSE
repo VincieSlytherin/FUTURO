@@ -1,0 +1,108 @@
+Futuro Personal Use License
+Version 1.0, 2026
+
+Copyright (c) 2026 Ran. All rights reserved.
+
+─────────────────────────────────────────────────────────────────────────────
+
+GRANT OF LICENSE
+
+Subject to the terms and conditions of this License, you are granted a
+worldwide, royalty-free, non-exclusive, non-transferable license to:
+
+  1. Use this software for personal, non-commercial purposes.
+  2. Study and modify the source code for personal use.
+  3. Share the unmodified source code with attribution, provided all copies
+     include this License and the copyright notice above.
+
+─────────────────────────────────────────────────────────────────────────────
+
+RESTRICTIONS
+
+You may NOT, without prior written permission from the copyright holder:
+
+  1. COMMERCIAL USE
+     Use this software, in whole or in part, as part of any commercial
+     product, service, or offering — including SaaS, consulting, or any
+     activity that generates revenue.
+
+  2. SUBLICENSING OR RESALE
+     Sell, sublicense, rent, lease, or otherwise transfer rights to this
+     software or any derivative work.
+
+  3. COMPETING PRODUCTS
+     Build or operate a product or service that substantially replicates
+     the functionality of Futuro and offers it to third parties.
+
+  4. MISREPRESENTATION
+     Remove or alter this License, the copyright notice, or any attribution
+     to the original author in any distributed or deployed copy.
+
+─────────────────────────────────────────────────────────────────────────────
+
+WHAT IS "COMMERCIAL USE"
+
+Commercial use means any use intended for or resulting in commercial
+advantage or monetary compensation. This includes but is not limited to:
+
+  - Deploying this software as a paid or freemium service for other users
+  - Using this software within a business to serve customers or clients
+  - Integrating this software into a product offered to the public
+  - Using this software as part of a consulting or freelance engagement
+    delivered to a paying client
+
+The following are NOT considered commercial use:
+
+  - Running this software on your own machine for your personal job search
+  - Sharing the source code on GitHub for others to study (with this License)
+  - Using this software internally at a company solely for your own job
+    search, where no revenue is derived from the software itself
+
+─────────────────────────────────────────────────────────────────────────────
+
+CONTRIBUTIONS
+
+If you submit a pull request or otherwise contribute code to this project,
+you agree that your contribution is made under the same terms as this
+License, and you grant the copyright holder the right to use your
+contribution in any future version of the software, including under a
+different license.
+
+─────────────────────────────────────────────────────────────────────────────
+
+THIRD-PARTY COMPONENTS
+
+This software uses third-party libraries and services subject to their own
+licenses. See the respective project repositories for details. Notably:
+
+  - python-jobspy: MIT License
+  - FastAPI: MIT License
+  - Next.js: MIT License
+  - ChromaDB: Apache 2.0
+  - Anthropic Claude API: subject to Anthropic's Terms of Service
+  - Ollama: MIT License
+
+Your use of those components is additionally subject to their respective
+licenses and terms of service.
+
+─────────────────────────────────────────────────────────────────────────────
+
+DISCLAIMER
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES,
+OR OTHER LIABILITY — WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE
+— ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+─────────────────────────────────────────────────────────────────────────────
+
+CONTACT
+
+For commercial licensing inquiries or special permissions, contact the
+copyright holder directly.
+
+─────────────────────────────────────────────────────────────────────────────
