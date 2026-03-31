@@ -132,6 +132,63 @@ See [docs/DEV_SETUP.md](docs/DEV_SETUP.md) for full setup instructions.
 
 ---
 
+## Running fully offline with Ollama
+
+Futuro has a provider abstraction layer that lets you swap Claude for a local Ollama model — no API key required, no data leaves your machine.
+
+### How provider routing works
+
+Each task type is routed independently:
+
+| Task | Default (Claude) | Ollama alternative |
+|---|---|---|
+| Chat / agents | `claude-sonnet-4-5` | `qwen2.5:7b` |
+| Intent classification | `claude-sonnet-4-5` | `qwen2.5:7b` |
+| Job listing scoring | `claude-sonnet-4-5` | `qwen2.5:7b` |
+| Embeddings (story search) | Anthropic embeddings | `nomic-embed-text` |
+
+### Setup
+
+```bash
+# Install Ollama: https://ollama.com
+make ollama-setup        # Pulls qwen2.5:7b + nomic-embed-text
+```
+
+Then set in your `.env`:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=qwen2.5:7b
+OLLAMA_EMBED_MODEL=nomic-embed-text
+```
+
+Or use `auto` to try Ollama first and fall back to Claude:
+
+```env
+LLM_PROVIDER=auto
+```
+
+You can also mix providers per task — e.g. use Ollama for chat but Claude for scoring:
+
+```env
+LLM_PROVIDER=claude
+CHAT_PROVIDER=ollama
+EMBED_PROVIDER=ollama
+```
+
+### Model options
+
+| Model | RAM required | Notes |
+|---|---|---|
+| `qwen2.5:7b` | ~6 GB | Default, fast on Apple Silicon |
+| `qwen2.5:14b` | ~10 GB | Higher quality, slower |
+| `nomic-embed-text` | ~300 MB | Required for story vector search |
+
+The `/settings` page in the UI shows live provider status per task type and lets you pull new Ollama models with a progress stream.
+
+---
+
 ## Memory system
 
 All persistent state lives in six Markdown files under `backend/data/memory/`, auto-committed to a local git repo on every change:
