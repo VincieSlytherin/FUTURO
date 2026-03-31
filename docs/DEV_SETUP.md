@@ -1,0 +1,289 @@
+# Development Setup
+
+---
+
+## Prerequisites
+
+| Tool | Version | Install |
+|---|---|---|
+| Python | 3.12+ | `pyenv install 3.12` |
+| Node.js | 20 LTS | `nvm install 20` |
+| Docker Desktop | latest | docker.com |
+| Git | 2.40+ | `brew install git` |
+| Make | any | pre-installed on macOS/Linux |
+
+Optional but recommended:
+- `pyenv` for Python version management
+- `nvm` for Node version management
+- `direnv` for automatic `.env` loading
+
+---
+
+## First-time setup
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/your-username/futuro.git
+cd futuro
+
+# 2. One-command setup
+make setup
+```
+
+`make setup` does the following:
+1. Creates `.env` from `.env.example`
+2. Generates a random `JWT_SECRET`
+3. Prompts for your `ANTHROPIC_API_KEY`
+4. Prompts to set your login password → hashes and stores it
+5. Creates Python virtual environment
+6. Installs Python dependencies
+7. Installs Node dependencies
+8. Runs database migrations (`alembic upgrade head`)
+9. Initializes the memory git repo (`git init backend/data/memory`)
+10. Creates initial memory file stubs
+11. Prints next steps
+
+After `make setup`, edit `.env` to confirm the values look right.
+
+---
+
+## Running in development
+
+```bash
+make dev
+```
+
+This starts:
+- FastAPI backend on `http://localhost:8000` (with hot reload via uvicorn `--reload`)
+- Next.js frontend on `http://localhost:3000` (with hot reload)
+
+Both services log to stdout. Use `Ctrl+C` to stop both.
+
+**Backend only:**
+```bash
+make dev-backend
+# or:
+cd backend && uvicorn app.main:app --reload --port 8000
+```
+
+**Frontend only:**
+```bash
+make dev-frontend
+# or:
+cd frontend && npm run dev
+```
+
+---
+
+## Project structure walkthrough
+
+### Backend (`backend/`)
+
+```
+backend/
+├── app/
+│   ├── main.py              # FastAPI app factory, router mounts
+│   ├── config.py            # Settings (pydantic-settings, reads .env)
+│   ├── deps.py              # FastAPI dependency injection (db, auth, memory_manager)
+│   ├── api/
+│   │   ├── auth.py          # POST /api/auth/login
+│   │   ├── chat.py          # POST /api/chat (SSE)
+│   │   ├── memory.py        # GET/PUT /api/memory/
+│   │   ├── campaign.py      # /api/campaign/*
+│   │   ├── stories.py       # /api/stories/*
+│   │   ├── intake.py        # /api/intake/*
+│   │   ├── resume.py        # /api/resume/*
+│   │   └── interviews.py    # /api/interviews/*
+│   ├── agents/
+│   │   ├── base.py          # BaseAgent, IntentClassifier, AgentRouter
+│   │   ├── prompts/         # Markdown prompt files per agent
+│   │   │   ├── base_persona.md
+│   │   │   ├── bq_coach.md
+│   │   │   └── ...
+│   │   ├── core_agent.py
+│   │   ├── bq_coach.py
+│   │   └── ...
+│   ├── memory/
+│   │   ├── manager.py       # MemoryManager class
+│   │   ├── vector_store.py  # ChromaDB interface
+│   │   └── markdown_io.py   # Section parsing utilities
+│   └── models/
+│       ├── campaign.py      # SQLAlchemy models
+│       ├── interview.py
+│       └── schemas.py       # Pydantic request/response models
+├── data/
+│   ├── memory/              # Git repo — markdown files
+│   ├── chroma/              # ChromaDB local store (gitignored)
+│   └── futuro.db            # SQLite database (gitignored, but backup)
+├── tests/
+│   ├── test_agents.py
+│   ├── test_api.py
+│   └── test_memory.py
+├── alembic/
+│   ├── env.py
+│   └── versions/
+├── Dockerfile
+└── requirements.txt
+```
+
+### Frontend (`frontend/`)
+
+```
+frontend/
+├── src/
+│   ├── app/
+│   │   ├── (auth)/login/page.tsx
+│   │   ├── (app)/
+│   │   │   ├── layout.tsx
+│   │   │   ├── chat/page.tsx
+│   │   │   ├── campaign/page.tsx
+│   │   │   ├── stories/page.tsx
+│   │   │   ├── resume/page.tsx
+│   │   │   ├── interviews/page.tsx
+│   │   │   └── memory/page.tsx
+│   │   └── api/             # Next.js route handlers (thin proxies to FastAPI)
+│   ├── components/
+│   │   ├── chat/
+│   │   ├── campaign/
+│   │   ├── stories/
+│   │   ├── resume/
+│   │   └── shared/
+│   ├── lib/
+│   │   ├── api.ts           # Typed API client
+│   │   ├── auth.ts          # JWT management
+│   │   └── store.ts         # Zustand stores
+│   └── types/
+│       └── index.ts         # Shared TypeScript types
+├── package.json
+├── tailwind.config.ts
+├── tsconfig.json
+└── Dockerfile
+```
+
+---
+
+## Environment variables
+
+```bash
+# .env (generated by make setup, never commit this)
+
+# Required
+ANTHROPIC_API_KEY=sk-ant-...
+JWT_SECRET=<auto-generated 256-bit hex>
+USER_PASSWORD_HASH=<bcrypt hash>
+
+# Model config
+CLAUDE_MODEL=claude-sonnet-4-5
+MAX_TOKENS=8192
+
+# Storage paths (defaults work for local dev)
+DATA_DIR=./backend/data
+MEMORY_DIR=${DATA_DIR}/memory
+CHROMA_DIR=${DATA_DIR}/chroma
+DB_PATH=${DATA_DIR}/futuro.db
+
+# Memory behavior
+GIT_AUTO_COMMIT=true
+
+# Development
+DEBUG=true
+LOG_LEVEL=info
+
+# CORS (frontend origin)
+ALLOWED_ORIGINS=http://localhost:3000
+```
+
+---
+
+## Common development tasks
+
+### Add a new API endpoint
+```bash
+# 1. Add route to appropriate file in backend/app/api/
+# 2. Register router in backend/app/main.py (if new file)
+# 3. Add corresponding typed function in frontend/src/lib/api.ts
+# 4. Test: make test-api
+```
+
+### Add a new agent
+```bash
+# 1. Create backend/app/agents/prompts/your_agent.md
+# 2. Create backend/app/agents/your_agent.py extending BaseAgent
+# 3. Add intent string to IntentClassifier.INTENTS
+# 4. Add to AgentRouter.AGENT_MAP
+# 5. Test: make test-agents
+```
+
+### Update the database schema
+```bash
+# 1. Update the SQLAlchemy model in backend/app/models/
+# 2. Generate migration:
+cd backend && alembic revision --autogenerate -m "add_outreach_table"
+# 3. Review the generated migration file in alembic/versions/
+# 4. Apply:
+make migrate
+```
+
+### Rebuild the story vector index
+```bash
+make rebuild-index
+# or via API:
+curl -X POST http://localhost:8000/api/stories/rebuild-index \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Run tests
+```bash
+make test              # All tests
+make test-backend      # Backend only (pytest)
+make test-frontend     # Frontend only (jest)
+```
+
+### Backup your data
+```bash
+make backup
+# Creates: backups/futuro-backup-2026-03-28.tar.gz
+# Contains: data/memory/ (markdown + git), data/futuro.db
+# Does NOT contain: data/chroma/ (rebuildable from markdown)
+```
+
+---
+
+## API development tips
+
+**Interactive API docs:** `http://localhost:8000/docs` (Swagger UI, auto-generated from FastAPI)
+
+**Quick token for testing:**
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"password":"your_dev_password"}' | jq -r '.access_token')
+echo $TOKEN
+```
+
+**Test a streaming endpoint:**
+```bash
+curl -N -X POST http://localhost:8000/api/chat \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{"message": "hey", "history": []}'
+```
+
+---
+
+## Git hooks (recommended)
+
+Add to `.git/hooks/pre-commit`:
+```bash
+#!/bin/sh
+# Prevent committing .env
+if git diff --cached --name-only | grep -q "^\.env$"; then
+  echo "ERROR: Attempting to commit .env file. Remove it from staging."
+  exit 1
+fi
+```
+
+```bash
+chmod +x .git/hooks/pre-commit
+```

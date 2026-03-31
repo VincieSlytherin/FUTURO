@@ -1,0 +1,38 @@
+{
+  "name": "futuro-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "jest --passWithNoTests"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "^18",
+    "react-dom": "^18",
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "tailwindcss": "^3.4.1",
+    "autoprefixer": "^10.0.1",
+    "postcss": "^8",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.383.0",
+    "zustand": "^4.5.4",
+    "@tanstack/react-query": "^5.51.1",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "js-cookie": "^3.0.5",
+    "@types/js-cookie": "^3.0.6",
+    "@hello-pangea/dnd": "^16.6.0"
+  },
+  "devDependencies": {
+    "jest": "^29",
+    "@testing-library/react": "^16",
+    "@testing-library/jest-dom": "^6"
+  }
+}

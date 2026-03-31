@@ -1,0 +1,35 @@
+# Environment — NEVER commit
+.env
+*.env.local
+
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/.pytest_cache/
+backend/*.egg-info/
+
+# Data — not in main repo (memory has its own git repo)
+backend/data/futuro.db
+backend/data/chroma/
+backend/data/uploads/
+backups/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/settings.json
+*.swp
+
+# Secrets
+credentials.json
+token.json
+service-account.json
