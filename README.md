@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="futuro.png" alt="Futuro" width="120" />
+  <img src="futuro.png" alt="Futuro" width="480" />
   <h1>Futuro</h1>
   <p>A warm, memory-driven job search companion you own and run yourself.</p>
 </div>
