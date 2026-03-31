@@ -6,251 +6,353 @@
 
 ---
 
-Futuro is a locally-hosted web application that knows your full professional story, tracks every company you're pursuing, coaches your interview prep, and gives honest strategic feedback. It's not a SaaS tool. You build it, you own the code, and your data never leaves your machine unless you choose otherwise.
+Futuro is a local-first web app for managing your job search. It keeps your memory in Markdown, stores structured data in SQLite, and gives you a single interface for chat, company tracking, stories, interviews, and search strategy.
 
----
+This README is written as a practical setup guide. If you follow it top to bottom, you should be able to:
 
-## Features
+- install dependencies
+- create a working `.env`
+- start the backend
+- start the frontend
+- open `http://localhost:3000/login`
+- sign in successfully
 
-- **Persistent memory** — your background, skills, target companies, and STAR stories persist across every session without re-explaining. Memory lives in plain Markdown files, git-tracked and always editable.
-- **AI-powered chat** — streaming conversation with intent classification that automatically routes to the right specialist agent (intake, story builder, resume editor, BQ coach, debrief, strategy review, job scout).
-- **Job scout** — automated job listing search via LinkedIn, Indeed, and Glassdoor (powered by python-jobspy), with Claude scoring each listing for fit. Runs on a schedule or on demand.
-- **Company pipeline** — visual Kanban tracker from RESEARCHING → APPLIED → SCREENING → TECHNICAL → ONSITE → OFFER, with activity log and response-rate metrics.
-- **Story bank** — STAR stories indexed by behavioral theme in ChromaDB, semantically searchable, ready for any behavioral question.
-- **Interview log** — log every round, run post-interview debriefs with the AI, and surface patterns across companies.
-- **Resume versioning** — tailored resume variants per company, version-tracked in memory.
-- **Memory editor** — edit your six core memory files directly in the browser, with a full git commit log.
-- **Provider flexibility** — use Anthropic Claude or run fully offline with local Ollama (Qwen 2.5, nomic-embed-text).
+## What works in the current repo snapshot
 
----
+- the backend creates SQLite tables automatically on startup
+- the memory directory is created automatically when first used
+- the app can boot in auth/data-only mode even if Claude and Ollama are both not configured yet
+- chat and provider-backed features need either a real Anthropic key or a working Ollama setup
+- there are no checked-in Alembic migration files in this snapshot
+
+## Main features
+
+- Persistent memory stored in Markdown and versioned with Git
+- AI chat with intent routing for intake, stories, resume help, BQ practice, debrief, strategy, and scouting
+- Company pipeline tracking
+- Story bank with local vector search
+- Interview log and review flow
+- Local SQLite storage
+- Optional Claude or Ollama provider setup
 
 ## Tech stack
 
 | Layer | Choice |
 |---|---|
-| Backend | FastAPI (Python 3.12) |
-| Frontend | Next.js 14 (TypeScript) |
-| LLM | Anthropic Claude API (default) or Ollama (local) |
-| Database | SQLite via SQLAlchemy 2.0 + Alembic migrations |
-| Memory files | Markdown (git-tracked via GitPython) |
-| Vector search | ChromaDB (local) |
-| Job scraping | python-jobspy (LinkedIn, Indeed, Glassdoor) |
-| Scheduling | APScheduler (background scout runs) |
-| Auth | Single-user JWT (bcrypt password hash) |
-| Container | Docker + docker-compose |
+| Backend | FastAPI |
+| Frontend | Next.js 14 |
+| Language | Python 3.12 + TypeScript |
+| Database | SQLite + SQLAlchemy 2.0 |
+| Auth | JWT + bcrypt |
+| Vector store | ChromaDB |
+| Job scraping | python-jobspy |
+| Scheduling | APScheduler |
 
----
+## Recommended local setup
 
-## Project structure
+If you already have a Conda environment named `futuro`, use that. It is the cleanest path for this project.
 
-```
-futuro/
-├── README.md
-├── Makefile
-├── docker-compose.yml
-├── .env.example
-├── docs/
-│   ├── TELOS.md              # Vision and philosophy
-│   ├── ARCHITECTURE.md       # System architecture
-│   ├── TECH_STACK.md         # Stack decisions and rationale
-│   ├── DATA_MODEL.md         # Database schema and memory structures
-│   ├── API_SPEC.md           # REST API reference
-│   ├── AGENT_DESIGN.md       # Agent architecture and prompts
-│   ├── MEMORY_SYSTEM.md      # Memory layer design
-│   ├── FRONTEND_SPEC.md      # UI specification
-│   ├── DEV_SETUP.md          # Local development guide
-│   ├── DEPLOYMENT.md         # Deployment options
-│   └── ROADMAP.md            # Phased development plan
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── api/              # auth, chat, campaign, scout, interviews,
-│   │   │                     # memory, stories, intake, providers
-│   │   ├── agents/           # CoreAgent, IntakeAgent, StoryBuilderAgent,
-│   │   │                     # ResumeEditorAgent, BQCoachAgent, DebriefAgent,
-│   │   │                     # StrategyReviewAgent, JobScoutAgent
-│   │   ├── providers/        # claude_provider, ollama_provider, router
-│   │   ├── memory/           # manager, vector_store, markdown_io
-│   │   └── models/           # SQLAlchemy ORM (Company, Interview, Session)
-│   ├── data/
-│   │   ├── memory/           # Markdown memory files (git-tracked)
-│   │   ├── uploads/          # Ingested files (gitignored)
-│   │   └── chroma/           # ChromaDB local store (gitignored)
-│   ├── tests/
-│   ├── alembic/
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── app/              # /chat, /campaign, /jobs, /interviews,
-│   │   │                     # /stories, /memory, /resume, /settings
-│   │   ├── components/       # MessageBubble, MemoryUpdateCard, ProviderStatus
-│   │   └── lib/              # api clients, Zustand store, TypeScript types
-│   ├── package.json
-│   └── Dockerfile
-```
+### 1. Activate your Python environment
 
----
-
-## Quick start
+If you already have the Conda env:
 
 ```bash
-git clone https://github.com/your-username/futuro.git
-cd futuro
-make setup        # Creates .env, hashes password, installs deps, prepares local data dirs
-make dev          # Starts backend (port 8000) + frontend (port 3000)
+conda activate futuro
+python --version
 ```
 
-Open [http://localhost:3000](http://localhost:3000), log in, and run onboarding.
+You want Python 3.12.x if possible.
 
-See [docs/DEV_SETUP.md](/Users/ranju1008/Desktop/futuro/docs/DEV_SETUP.md) for full setup instructions. In the current repo snapshot, SQLite tables are created automatically on backend startup.
-
-### Key `make` targets
-
-| Command | What it does |
-|---|---|
-| `make setup` | First-time setup (env, deps, local data dirs, memory git repo) |
-| `make dev` | Run backend + frontend in development mode |
-| `make test` | Run all tests |
-| `make migrate` | Explain current DB initialization behavior |
-| `make rebuild-index` | Rebuild ChromaDB vector index from stories_bank.md |
-| `make backup` | Archive data directory to a tarball |
-| `make docker-dev` | Run everything in Docker |
-| `make ollama-setup` | Pull qwen2.5:7b and nomic-embed-text for offline use |
-
-### Environment variables (`.env.example`)
-
-| Variable | Required | Description |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes* | Claude API key (*not required if using Ollama only) |
-| `JWT_SECRET` | Yes | Generated by `make setup` |
-| `USER_PASSWORD_HASH` | Yes | Bcrypt hash of your login password |
-| `LLM_PROVIDER` | No | `claude` (default), `ollama`, or `auto` |
-| `SCOUT_DEFAULT_LOCATION` | No | e.g. `San Francisco, CA` |
-| `OLLAMA_BASE_URL` | No | `http://localhost:11434` |
-
----
-
-## Running fully offline with Ollama
-
-Futuro has a provider abstraction layer that lets you swap Claude for a local Ollama model — no API key required, no data leaves your machine.
-
-### How provider routing works
-
-Each task type is routed independently:
-
-| Task | Default (Claude) | Ollama alternative |
-|---|---|---|
-| Chat / agents | `claude-sonnet-4-5` | `qwen2.5:7b` |
-| Intent classification | `claude-sonnet-4-5` | `qwen2.5:7b` |
-| Job listing scoring | `claude-sonnet-4-5` | `qwen2.5:7b` |
-| Embeddings (story search) | Anthropic embeddings | `nomic-embed-text` |
-
-### Setup
+If you do not already have that env, create it:
 
 ```bash
-# Install Ollama: https://ollama.com
-make ollama-setup        # Pulls qwen2.5:7b + nomic-embed-text
+conda create -n futuro python=3.12 -y
+conda activate futuro
 ```
 
-Then set in your `.env`:
+### 2. Install backend dependencies
+
+From the project root:
+
+```bash
+cd /Users/ranju1008/Desktop/futuro
+pip install -r backend/requirements.txt
+```
+
+### 3. Install frontend dependencies
+
+```bash
+cd /Users/ranju1008/Desktop/futuro/frontend
+npm install
+cd ..
+```
+
+### 4. Create your environment file
+
+```bash
+cd /Users/ranju1008/Desktop/futuro
+cp .env.example .env
+```
+
+### 5. Generate `JWT_SECRET`
+
+```bash
+openssl rand -hex 32
+```
+
+Paste that value into:
 
 ```env
+JWT_SECRET=your-generated-value
+```
+
+### 6. Generate `USER_PASSWORD_HASH`
+
+Pick the password you want to use in the login page, then generate a bcrypt hash for it:
+
+```bash
+python -c "import bcrypt; print(bcrypt.hashpw(b'your-password-here', bcrypt.gensalt()).decode())"
+```
+
+Paste the result into:
+
+```env
+USER_PASSWORD_HASH=your-generated-bcrypt-hash
+```
+
+### 7. Fill `.env`
+
+The safest first-boot setup is to make the app start even before you configure an LLM.
+
+Use values like this:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-not-set
+JWT_SECRET=your-generated-value
+USER_PASSWORD_HASH=your-generated-bcrypt-hash
+
+CLAUDE_MODEL=claude-sonnet-4-5
+MAX_TOKENS=8192
+
+DATA_DIR=./backend/data
+MEMORY_DIR=./backend/data/memory
+CHROMA_DIR=./backend/data/chroma
+DB_PATH=./backend/data/futuro.db
+
+GIT_AUTO_COMMIT=true
+
+DEBUG=true
+LOG_LEVEL=info
+ALLOWED_ORIGINS=["http://localhost:3000"]
+
+SCOUT_ENABLED=false
+SCOUT_DEFAULT_LOCATION=San Francisco, CA
+SCOUT_DEFAULT_SITES=linkedin,indeed,glassdoor
+
+LLM_PROVIDER=auto
+OLLAMA_ENABLED=false
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=qwen2.5:7b
+OLLAMA_EMBED_MODEL=nomic-embed-text
+OLLAMA_TIMEOUT=120.0
+OLLAMA_KEEP_ALIVE=10m
+```
+
+With that setup:
+
+- the app will boot
+- login will work
+- database and memory routes will work
+- chat will stay unavailable until you configure Claude or Ollama
+
+## Optional provider setup
+
+### Option A: Use Claude
+
+Set:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-your-real-key
+LLM_PROVIDER=claude
+```
+
+### Option B: Use Ollama
+
+Install Ollama and pull models first:
+
+```bash
+ollama serve
+ollama pull qwen2.5:7b
+ollama pull nomic-embed-text
+```
+
+Then update `.env`:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-not-set
 LLM_PROVIDER=ollama
+OLLAMA_ENABLED=true
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=qwen2.5:7b
 OLLAMA_EMBED_MODEL=nomic-embed-text
 ```
 
-Or use `auto` to try Ollama first and fall back to Claude:
+## Start the app
 
-```env
-LLM_PROVIDER=auto
+Open two terminals.
+
+### Terminal 1: backend
+
+```bash
+cd /Users/ranju1008/Desktop/futuro
+conda activate futuro
+cd backend
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-You can also mix providers per task — e.g. use Ollama for chat but Claude for scoring:
+Expected result:
 
-```env
-LLM_PROVIDER=claude
-CHAT_PROVIDER=ollama
-EMBED_PROVIDER=ollama
+- backend starts on `http://127.0.0.1:8000`
+- SQLite tables are created automatically on first boot
+
+### Terminal 2: frontend
+
+```bash
+cd /Users/ranju1008/Desktop/futuro/frontend
+npx next dev -H 127.0.0.1 -p 3000
 ```
 
-### Model options
+Expected result:
 
-| Model | RAM required | Notes |
-|---|---|---|
-| `qwen2.5:7b` | ~6 GB | Default, fast on Apple Silicon |
-| `qwen2.5:14b` | ~10 GB | Higher quality, slower |
-| `nomic-embed-text` | ~300 MB | Required for story vector search |
+- frontend starts on `http://127.0.0.1:3000`
 
-The `/settings` page in the UI shows live provider status per task type and lets you pull new Ollama models with a progress stream.
+## Verify everything
 
----
+### Check backend health
 
-## Memory system
+```bash
+curl http://127.0.0.1:8000/api/health
+```
 
-All persistent state lives in six Markdown files under `backend/data/memory/`, auto-committed to a local git repo on every change:
+You should see something like:
 
-| File | Purpose |
-|---|---|
-| `L0_identity.md` | Who you are — background, skills, target roles |
-| `L1_campaign.md` | Active job search state and goals |
-| `L2_knowledge.md` | Distilled insights from ingested content |
-| `stories_bank.md` | STAR stories indexed by behavioral theme |
-| `resume_versions.md` | Resume variants per target role |
-| `interview_log.md` | Post-interview debriefs and patterns |
+```json
+{"status":"ok","version":"0.4.0","providers":{}}
+```
 
-You can edit any of these directly in the browser (`/memory`), via the chat, or with any text editor. Every change is versioned — you own the history.
+If `providers` is empty, that is okay for first boot. It just means Claude/Ollama is not configured yet.
 
----
+### Check the login page
 
-## Agent system
+Open:
 
-Futuro classifies each chat message by intent and routes it to the appropriate agent:
+```text
+http://127.0.0.1:3000/login
+```
 
-| Intent | Agent | What it does |
-|---|---|---|
-| GENERAL | CoreAgent | Greetings, check-ins, open-ended support |
-| INTAKE | IntakeAgent | Process URLs, PDFs, DOCX, or pasted text into memory |
-| STORY | StoryBuilderAgent | Build and refine STAR stories |
-| RESUME | ResumeEditorAgent | Tailor resume to a specific role |
-| BQ | BQCoachAgent | Behavioral question practice with follow-up |
-| DEBRIEF | DebriefAgent | Post-interview reflection and coaching |
-| STRATEGY | StrategyReviewAgent | Review and adjust overall search strategy |
-| SCOUT | JobScoutAgent | Analyze job listings and recommend targets |
+or
 
-Every agent loads your full memory context before responding and can propose atomic memory updates inline.
+```text
+http://localhost:3000/login
+```
 
----
+### Test login from the terminal
 
-## Design principles
+```bash
+curl -X POST http://127.0.0.1:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"password":"your-password-here"}'
+```
 
-1. **You own it** — code, data, and memory live on your machine
-2. **Human-readable state** — all memory is Markdown; edit it directly, git blame it, carry it to any future system
-3. **Warm by design** — encouragement and emotional intelligence are not bolt-ons; they're in the agent architecture
-4. **Goal-oriented, not task-oriented** — every action connects back to your target role
-5. **Incrementally deployable** — works fully offline with SQLite + ChromaDB + Ollama; cloud deployment is optional
+If the password matches `USER_PASSWORD_HASH`, you will get back an `access_token`.
 
----
+## What you can do before LLM setup
+
+Even without Claude or Ollama configured, you can still:
+
+- open the app
+- log in
+- use auth
+- create the SQLite database
+- access provider status
+- work on memory and other local-only parts of the app
+
+What will still need a provider:
+
+- chat
+- intent classification
+- provider-backed scoring
+- local/remote embedding features that rely on the configured provider path
+
+## Common issues
+
+### `ALLOWED_ORIGINS` parsing error
+
+Use JSON array syntax in `.env`, not a bare string:
+
+```env
+ALLOWED_ORIGINS=["http://localhost:3000"]
+```
+
+### `.env` is not being read
+
+The backend now resolves `.env` from the project root. Start the backend from the repo and keep your `.env` in the top-level folder.
+
+### Login fails even though the password looks right
+
+Make sure you generated `USER_PASSWORD_HASH` with raw `bcrypt`, for example:
+
+```bash
+python -c "import bcrypt; print(bcrypt.hashpw(b'your-password-here', bcrypt.gensalt()).decode())"
+```
+
+### `greenlet` missing error on backend startup
+
+Install backend requirements again:
+
+```bash
+pip install -r backend/requirements.txt
+```
+
+### Frontend starts but chat says no provider is configured
+
+That is expected if you used:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-not-set
+OLLAMA_ENABLED=false
+```
+
+Configure Claude or Ollama to enable chat.
+
+## Useful files
+
+- `backend/requirements.txt`
+- `.env.example`
+- `backend/app/config.py`
+- `backend/app/api/auth.py`
+- `backend/app/providers/router.py`
+- `frontend/src/components/shared/ProviderStatus.tsx`
+- `docs/DEV_SETUP.md`
+
+## Project structure
+
+```text
+futuro/
+├── backend/
+│   ├── app/
+│   ├── data/
+│   ├── tests/
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   └── package.json
+├── docs/
+├── .env.example
+├── Makefile
+└── README.md
+```
 
 ## License
 
-**Futuro Personal Use License v1.0** — Copyright (c) 2026 Ran. All rights reserved.
-
-You may use, study, and modify this software for **personal, non-commercial purposes**. You may share the unmodified source with attribution and this license included.
-
-**You may NOT**, without prior written permission:
-- Use this software commercially (SaaS, consulting, revenue-generating products)
-- Sell, sublicense, or transfer rights to this software or any derivative
-- Build a competing product that replicates Futuro's functionality and offers it to third parties
-- Remove or alter this license, the copyright notice, or attribution in any distributed copy
-
-Running this software on your own machine for your personal job search, or sharing the source on GitHub for others to study, is explicitly permitted.
-
-See [LICENSE](LICENSE) for the full license text, including third-party component notices and disclaimer.
-
----
-
-*For commercial licensing inquiries, contact the copyright holder directly.*
+Futuro is shared under the repository's included license terms. See `LICENSE` for details.

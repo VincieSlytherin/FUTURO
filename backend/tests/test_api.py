@@ -1,14 +1,14 @@
+import bcrypt
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
-from passlib.context import CryptContext
 
 # Patch settings before importing app
 import os
 os.environ.update({
     "ANTHROPIC_API_KEY": "sk-ant-test",
     "JWT_SECRET": "test-secret-32-chars-long-enough-x",
-    "USER_PASSWORD_HASH": CryptContext(schemes=["bcrypt"]).hash("testpass"),
+    "USER_PASSWORD_HASH": bcrypt.hashpw(b"testpass", bcrypt.gensalt()).decode(),
     "DATA_DIR": "/tmp/futuro-test/data",
     "MEMORY_DIR": "/tmp/futuro-test/data/memory",
     "CHROMA_DIR": "/tmp/futuro-test/data/chroma",

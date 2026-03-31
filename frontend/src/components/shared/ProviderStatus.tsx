@@ -70,7 +70,8 @@ export default function ProviderStatus() {
   if (!status) return null;
 
   // Derive dominant provider for the compact indicator
-  const chatProvider = status.routing?.chat?.provider ?? "unknown";
+  const hasRouting = Object.keys(status.routing ?? {}).length > 0;
+  const chatProvider = status.routing?.chat?.provider ?? "none";
   const allOk = health ? Object.values(health).every(h => h.ok) : null;
 
   return (
@@ -92,7 +93,9 @@ export default function ProviderStatus() {
         </span>
 
         <span className="flex-1 text-left text-gray-500 truncate">
-          {chatProvider === "ollama"
+          {!hasRouting
+            ? "No provider"
+            : chatProvider === "ollama"
             ? status.ollama?.chat_model ?? "Local"
             : "Claude"}
         </span>
@@ -113,6 +116,14 @@ export default function ProviderStatus() {
               <span className="text-xs text-gray-400 truncate ml-auto">{h.model}</span>
             </div>
           ))}
+
+          {!hasRouting && (
+            <div className="px-3 py-2 border-t border-gray-100">
+              <p className="text-xs text-amber-700">
+                No LLM provider is configured yet. Login and memory features still work; chat needs Claude or Ollama.
+              </p>
+            </div>
+          )}
 
           {/* Task routing */}
           <div className="px-3 py-2 border-t border-gray-100">

@@ -27,7 +27,14 @@ Because of that, you do not need a migration step to get the app running locally
 
 The backend dependency list lives in [backend/requirements.txt](/Users/ranju1008/Desktop/futuro/backend/requirements.txt).
 
-Create a virtual environment and install dependencies:
+If you already have a Conda environment named `futuro`, activate that first and use it.
+
+```bash
+conda activate futuro
+python --version
+```
+
+Otherwise, create a virtual environment and install dependencies:
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro
@@ -65,17 +72,29 @@ Paste the output into `JWT_SECRET=` in `.env`.
 
 ### 3. Generate `USER_PASSWORD_HASH`
 
-Make sure the backend virtual environment is active, then run:
+Make sure your backend environment is active, then run:
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro
-source backend/.venv/bin/activate
-python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('your-password-here'))"
+python -c "import bcrypt; print(bcrypt.hashpw(b'your-password-here', bcrypt.gensalt()).decode())"
 ```
 
 Paste the output into `USER_PASSWORD_HASH=` in `.env`.
 
 ### 4. Fill the minimum required `.env` values
+
+Minimal first-boot setup:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-not-set
+JWT_SECRET=your-generated-secret
+USER_PASSWORD_HASH=your-generated-bcrypt-hash
+DEBUG=true
+ALLOWED_ORIGINS=["http://localhost:3000"]
+SCOUT_ENABLED=false
+LLM_PROVIDER=auto
+OLLAMA_ENABLED=false
+```
 
 Claude-based setup:
 
@@ -84,7 +103,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 JWT_SECRET=your-generated-secret
 USER_PASSWORD_HASH=your-generated-bcrypt-hash
 DEBUG=true
-ALLOWED_ORIGINS=http://localhost:3000
+ALLOWED_ORIGINS=["http://localhost:3000"]
 LLM_PROVIDER=claude
 CLAUDE_MODEL=claude-sonnet-4-5
 ```
@@ -111,8 +130,9 @@ ollama pull nomic-embed-text
 Then set:
 
 ```env
-ANTHROPIC_API_KEY=placeholder-not-used
+ANTHROPIC_API_KEY=sk-ant-not-set
 LLM_PROVIDER=ollama
+OLLAMA_ENABLED=true
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_CHAT_MODEL=qwen2.5:7b
 OLLAMA_EMBED_MODEL=nomic-embed-text
@@ -130,9 +150,8 @@ LLM_PROVIDER=auto
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro
-source backend/.venv/bin/activate
 cd backend
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 On first startup, the backend will:
@@ -148,14 +167,14 @@ Open a second terminal:
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro/frontend
-npm run dev
+npx next dev -H 127.0.0.1 -p 3000
 ```
 
 ### Open the app
 
 - Frontend: `http://localhost:3000`
-- Backend health: `http://localhost:8000/api/health`
-- Backend docs: `http://localhost:8000/docs`
+- Backend health: `http://127.0.0.1:8000/api/health`
+- Backend docs: `http://127.0.0.1:8000/docs`
 
 The docs page is only visible when `DEBUG=true`.
 
@@ -178,7 +197,7 @@ The manual steps above are still the clearest path if you want full control over
 ### Health check
 
 ```bash
-curl http://localhost:8000/api/health
+curl http://127.0.0.1:8000/api/health
 ```
 
 Expected result: JSON containing `"status": "ok"`.
@@ -186,7 +205,7 @@ Expected result: JSON containing `"status": "ok"`.
 ### Login test
 
 ```bash
-curl -X POST http://localhost:8000/api/auth/login \
+curl -X POST http://127.0.0.1:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"password":"your-password-here"}'
 ```

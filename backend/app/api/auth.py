@@ -1,18 +1,28 @@
 from datetime import datetime, timedelta
+import bcrypt
 from fastapi import APIRouter, HTTPException, status
 from jose import jwt
-from passlib.context import CryptContext
 
 from app.config import settings
 from app.models.schemas import LoginRequest, TokenResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest):
-    if not pwd_context.verify(body.password, settings.user_password_hash):
+    try:
+        valid = bcrypt.checkpw(
+            body.password.encode("utf-8"),
+            settings.user_password_hash.encode("utf-8"),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid USER_PASSWORD_HASH configuration",
+        ) from exc
+
+    if not valid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
 
     expire = datetime.utcnow() + timedelta(days=settings.jwt_expire_days)

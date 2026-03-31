@@ -1,9 +1,12 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=PROJECT_ROOT / ".env", extra="ignore")
 
     # Anthropic
     anthropic_api_key: str
@@ -17,10 +20,10 @@ class Settings(BaseSettings):
     user_password_hash: str
 
     # Storage
-    data_dir: Path = Path("./data")
-    memory_dir: Path = Path("./data/memory")
-    chroma_dir: Path = Path("./data/chroma")
-    db_path: Path = Path("./data/futuro.db")
+    data_dir: Path = BACKEND_ROOT / "data"
+    memory_dir: Path = BACKEND_ROOT / "data/memory"
+    chroma_dir: Path = BACKEND_ROOT / "data/chroma"
+    db_path: Path = BACKEND_ROOT / "data/futuro.db"
 
     # Memory
     git_auto_commit: bool = True
@@ -54,9 +57,19 @@ class Settings(BaseSettings):
     log_level: str = "info"
     allowed_origins: list[str] = ["http://localhost:3000"]
 
+    def model_post_init(self, __context) -> None:
+        self.data_dir = self._resolve_path(self.data_dir)
+        self.memory_dir = self._resolve_path(self.memory_dir)
+        self.chroma_dir = self._resolve_path(self.chroma_dir)
+        self.db_path = self._resolve_path(self.db_path)
+
     @property
     def db_url(self) -> str:
         return f"sqlite+aiosqlite:///{self.db_path}"
+
+    @staticmethod
+    def _resolve_path(path: Path) -> Path:
+        return path if path.is_absolute() else (PROJECT_ROOT / path).resolve()
 
 
 settings = Settings()

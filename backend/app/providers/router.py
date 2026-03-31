@@ -42,6 +42,9 @@ async def init_providers(settings: "Settings") -> None:
     from app.providers.claude_provider import ClaudeProvider
     from app.providers.ollama_provider import OllamaProvider
 
+    # Reset the registry on every startup so reloads don't keep stale providers.
+    _registry.clear()
+
     # Build candidate providers
     claude: ClaudeProvider | None = None
     ollama: OllamaProvider | None = None
@@ -74,7 +77,7 @@ async def init_providers(settings: "Settings") -> None:
 
     claude_ok = claude is not None
 
-    def _resolve(explicit: str | None, task: TaskType) -> LLMProvider:
+    def _resolve(explicit: str | None, task: TaskType) -> LLMProvider | None:
         """Pick a provider for a task, respecting explicit overrides."""
         want = explicit or settings.llm_provider
 
@@ -84,7 +87,8 @@ async def init_providers(settings: "Settings") -> None:
             if claude_ok:
                 logger.warning(f"[providers] ollama requested for {task} but unavailable — falling back to claude")
                 return claude  # type: ignore
-            raise RuntimeError(f"No provider available for task {task}")
+            logger.warning(f"[providers] no provider available for task {task.value}")
+            return None
 
         if want == "claude":
             if claude_ok:
@@ -92,28 +96,43 @@ async def init_providers(settings: "Settings") -> None:
             if ollama_ok:
                 logger.warning(f"[providers] claude requested for {task} but not configured — falling back to ollama")
                 return ollama  # type: ignore
-            raise RuntimeError(f"No provider available for task {task}")
+            logger.warning(f"[providers] no provider available for task {task.value}")
+            return None
 
         # "auto" — prefer ollama if up, else claude
         if ollama_ok:
             return ollama  # type: ignore
         if claude_ok:
             return claude  # type: ignore
-        raise RuntimeError(f"No provider available for task {task} (both claude and ollama unavailable)")
+        logger.warning(f"[providers] no provider available for task {task.value}")
+        return None
 
-    _registry[TaskType.CHAT]     = _resolve(settings.chat_provider,     TaskType.CHAT)
-    _registry[TaskType.CLASSIFY] = _resolve(settings.classify_provider,  TaskType.CLASSIFY)
-    _registry[TaskType.SCORE]    = _resolve(settings.score_provider,     TaskType.SCORE)
-    _registry[TaskType.EMBED]    = _resolve(settings.embed_provider,     TaskType.EMBED)
+    assignments = {
+        TaskType.CHAT: _resolve(settings.chat_provider, TaskType.CHAT),
+        TaskType.CLASSIFY: _resolve(settings.classify_provider, TaskType.CLASSIFY),
+        TaskType.SCORE: _resolve(settings.score_provider, TaskType.SCORE),
+        TaskType.EMBED: _resolve(settings.embed_provider, TaskType.EMBED),
+    }
+
+    for task, provider in assignments.items():
+        if provider is not None:
+            _registry[task] = provider
 
     for task, provider in _registry.items():
         logger.info(f"[providers] {task.value:10} → {provider.name} ({_model_label(provider)})")
+
+    if not _registry:
+        logger.warning(
+            "[providers] no LLM provider is available. Futuro will start in auth/data-only mode until Claude or Ollama is configured."
+        )
 
 
 def get_provider(task: TaskType = TaskType.CHAT) -> LLMProvider:
     """Return the provider assigned to a task type."""
     if not _registry:
-        raise RuntimeError("Providers not initialised — call init_providers() first")
+        raise RuntimeError(
+            "No LLM provider is configured. Set ANTHROPIC_API_KEY or enable and start Ollama."
+        )
     return _registry[task]
 
 
@@ -130,6 +149,14 @@ def provider_status() -> dict:
 
 async def provider_health() -> dict:
     """Run health checks on all unique providers."""
+    if not _registry:
+        return {
+            "unconfigured": {
+                "ok": False,
+                "model": "none",
+                "detail": "No LLM provider configured. Set ANTHROPIC_API_KEY or install and start Ollama.",
+            }
+        }
     seen: set[str] = set()
     results = {}
     for task, provider in _registry.items():
