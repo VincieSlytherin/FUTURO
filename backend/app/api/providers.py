@@ -36,7 +36,7 @@ async def get_status(_: AuthDep):
             "base_url":    settings.ollama_base_url,
             "chat_model":  settings.ollama_chat_model,
             "embed_model": settings.ollama_embed_model,
-        } if settings.ollama_enabled else None,
+        },
     }
 
 
@@ -49,8 +49,6 @@ async def get_health(_: AuthDep):
 @router.get("/models")
 async def list_models(_: AuthDep):
     """List locally available Ollama models with size info."""
-    if not settings.ollama_enabled:
-        return {"models": [], "error": "Ollama not enabled"}
     try:
         from app.providers.ollama_provider import OllamaProvider
         p = OllamaProvider(
@@ -75,9 +73,6 @@ async def pull_model(body: PullRequest, _: AuthDep):
     Pull an Ollama model. Streams SSE progress events.
     Example: POST /api/providers/pull  body: {"model": "qwen2.5:14b"}
     """
-    if not settings.ollama_enabled:
-        raise HTTPException(400, "Ollama not enabled")
-
     from app.providers.ollama_provider import OllamaProvider
 
     async def _stream():

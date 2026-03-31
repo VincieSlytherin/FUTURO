@@ -35,6 +35,15 @@ interface OllamaModel {
   modified_at: string;
 }
 
+interface PullEvent {
+  status?: string;
+  completed?: number;
+  total?: number;
+  digest?: string;
+  error?: string;
+  model?: string;
+}
+
 const QWEN_MODELS = [
   { id: "qwen2.5:7b",    label: "Qwen 2.5 7B",  ram: "4 GB",  note: "Fast, daily use"        },
   { id: "qwen2.5:14b",   label: "Qwen 2.5 14B", ram: "9 GB",  note: "Balanced quality/speed" },
@@ -60,9 +69,17 @@ function PullModal({ model, onDone, onClose }: { model: string; onDone: () => vo
   const [lines, setLines] = useState<string[]>([]);
   const [done,  setDone]  = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusText, setStatusText] = useState("Preparing download…");
+  const [completed, setCompleted] = useState<number | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
+
+  const percent = total && total > 0 && completed !== null
+    ? Math.max(0, Math.min(100, Math.round((completed / total) * 100)))
+    : null;
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     async function pull() {
       try {
@@ -70,8 +87,14 @@ function PullModal({ model, onDone, onClose }: { model: string; onDone: () => vo
           method: "POST",
           headers: { Authorization: `Bearer ${getCookie("futuro_token")}`, "Content-Type": "application/json" },
           body: JSON.stringify({ model }),
+          signal: controller.signal,
         });
-        if (!res.body) return;
+        if (!res.ok) {
+          const detail = await res.json().catch(() => null);
+          const msg = detail?.detail ? `Pull failed (${res.status}): ${detail.detail}` : `Pull failed (${res.status})`;
+          throw new Error(msg);
+        }
+        if (!res.body) throw new Error("No download stream returned");
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buf = "";
@@ -84,22 +107,47 @@ function PullModal({ model, onDone, onClose }: { model: string; onDone: () => vo
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
             try {
-              const data = JSON.parse(line.slice(6));
-              if (data.status === "success") { setDone(true); onDone(); return; }
-              if (data.status === "error")   { setError(data.error); return; }
-              const msg = data.status ?? "";
-              const pct = data.total ? Math.round((data.completed / data.total) * 100) : null;
-              const display = pct !== null ? `${msg} ${pct}%` : msg;
+              const data = JSON.parse(line.slice(6)) as PullEvent;
+              if (data.status === "success") {
+                setDone(true);
+                setStatusText("Download complete");
+                onDone();
+                return;
+              }
+              if (data.status === "error") {
+                setError(data.error ?? "Unknown pull error");
+                setStatusText("Download failed");
+                return;
+              }
+
+              if (typeof data.completed === "number") setCompleted(data.completed);
+              if (typeof data.total === "number") setTotal(data.total);
+
+              const digest = data.digest ? ` · ${data.digest.slice(7, 19)}` : "";
+              const msg = data.status ?? "Working";
+              const nextStatus = `${msg}${digest}`;
+              setStatusText(nextStatus);
+
+              const pct = data.total && typeof data.completed === "number"
+                ? Math.round((data.completed / data.total) * 100)
+                : null;
+              const display = pct !== null ? `${nextStatus} · ${pct}%` : nextStatus;
               if (display) setLines(l => [...l.slice(-8), display]);
             } catch { /* skip */ }
           }
         }
       } catch (e: any) {
-        setError(e.message);
+        if (!cancelled) {
+          setError(e.message);
+          setStatusText("Download failed");
+        }
       }
     }
     pull();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [model]);
 
   return (
@@ -109,9 +157,40 @@ function PullModal({ model, onDone, onClose }: { model: string; onDone: () => vo
           <h2 className="font-semibold text-gray-900 text-sm">Pulling {model}</h2>
           {(done || error) && <button onClick={onClose}><X size={16} className="text-gray-400" /></button>}
         </div>
-        <div className="px-6 py-4 font-mono text-xs text-gray-600 min-h-[80px] space-y-1 bg-gray-50 rounded-b-none">
-          {lines.map((l, i) => <div key={i}>{l}</div>)}
-          {!done && !error && <div className="text-gray-400 animate-pulse">Downloading…</div>}
+        <div className="px-6 py-4 bg-gray-50 rounded-b-none space-y-4">
+          <div>
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-gray-600 truncate">{statusText}</span>
+              <span className="font-mono text-gray-500 flex-shrink-0">
+                {done ? "100%" : percent !== null ? `${percent}%` : "…"}
+              </span>
+            </div>
+            <div className="mt-2 h-2 rounded-full bg-gray-200 overflow-hidden">
+              {percent !== null || done ? (
+                <div
+                  className={clsx(
+                    "h-full rounded-full transition-all duration-300",
+                    done ? "bg-green-500" : "bg-futuro-500"
+                  )}
+                  style={{ width: `${done ? 100 : percent}%` }}
+                />
+              ) : (
+                <div className="h-full w-1/3 rounded-full bg-futuro-400 animate-pulse" />
+              )}
+            </div>
+            {(completed !== null && total !== null) && (
+              <div className="mt-1 text-[11px] text-gray-400 font-mono">
+                {fmtBytes(completed)} / {fmtBytes(total)}
+              </div>
+            )}
+          </div>
+
+          <div className="font-mono text-xs text-gray-600 min-h-[80px] space-y-1">
+            {lines.map((l, i) => <div key={i}>{l}</div>)}
+            {!done && !error && lines.length === 0 && (
+              <div className="text-gray-400 animate-pulse">Downloading…</div>
+            )}
+          </div>
         </div>
         <div className="px-6 py-3 border-t flex items-center gap-2">
           {done  && <><CheckCircle size={14} className="text-green-500" /><span className="text-sm text-green-600">Done! Restart Futuro to activate.</span></>}
@@ -266,6 +345,14 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-400 mb-4">
             Pull models to your machine. After pulling, update <code className="font-mono bg-gray-100 px-1 rounded">OLLAMA_CHAT_MODEL</code> in <code className="font-mono bg-gray-100 px-1 rounded">.env</code> and restart.
           </p>
+          {status?.ollama?.enabled === false && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-xs text-amber-800">
+                Ollama downloads are allowed here even though <code className="font-mono">OLLAMA_ENABLED=false</code> right now.
+                After the model finishes downloading, set <code className="font-mono">OLLAMA_ENABLED=true</code> in <code className="font-mono">.env</code> and restart if you want Futuro to use it.
+              </p>
+            </div>
+          )}
 
           {/* Chat models */}
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Qwen 2.5 — chat models</h3>
