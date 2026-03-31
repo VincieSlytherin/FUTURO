@@ -1,5 +1,7 @@
 // ── Scout (append to existing api.ts) ────────────────────────────────────────
 
+import { req } from "@/lib/api";
+
 export interface ScoutConfig {
   id: number;
   name: string;

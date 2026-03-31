@@ -17,7 +17,7 @@ function headers(extra: Record<string, string> = {}): Record<string, string> {
   };
 }
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+export async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: { ...headers(), ...(init?.headers ?? {}) },

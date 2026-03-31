@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { isLoggedIn, logout } from "@/lib/api";
 import {
-  MessageSquare, LayoutKanban, BookOpen,
+  MessageSquare, SquareKanban, BookOpen,
   FileText, Calendar, Brain, LogOut, Briefcase, Settings,
 } from "lucide-react";
 import clsx from "clsx";
@@ -14,7 +14,7 @@ import ProviderStatus from "@/components/shared/ProviderStatus";
 const NAV = [
   { href: "/chat",       label: "Chat",       icon: MessageSquare },
   { href: "/jobs",       label: "Jobs",       icon: Briefcase     },
-  { href: "/campaign",   label: "Campaign",   icon: LayoutKanban  },
+  { href: "/campaign",   label: "Campaign",   icon: SquareKanban  },
   { href: "/stories",    label: "Stories",    icon: BookOpen      },
   { href: "/resume",     label: "Resume",     icon: FileText      },
   { href: "/interviews", label: "Interviews", icon: Calendar      },
