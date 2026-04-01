@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.deps import AuthDep, DbDep
-from app.models.db import Company, CompanyEvent
+from app.models.db import Company, CompanyEvent, Interview
 from app.models.schemas import (
     CompanyCreate, CompanyUpdate, CompanyResponse,
     StageUpdateRequest, CampaignStats, VALID_STAGES,
@@ -13,6 +13,15 @@ from app.models.schemas import (
 router = APIRouter(prefix="/api/campaign", tags=["campaign"])
 
 ACTIVE_STAGES = {"RESEARCHING", "APPLIED", "SCREENING", "TECHNICAL", "ONSITE", "OFFER"}
+
+
+async def _get_company_with_events(db, company_id: int) -> Company | None:
+    result = await db.execute(
+        select(Company)
+        .options(selectinload(Company.events))
+        .where(Company.id == company_id)
+    )
+    return result.scalar_one_or_none()
 
 
 @router.get("/companies", response_model=list[CompanyResponse])
@@ -43,18 +52,15 @@ async def create_company(body: CompanyCreate, _: AuthDep, db: DbDep):
         stage_to="RESEARCHING",
     ))
     await db.commit()
-    await db.refresh(company)
-    return company
+    loaded = await _get_company_with_events(db, company.id)
+    if not loaded:
+        raise HTTPException(status_code=500, detail="Company was created but could not be reloaded")
+    return loaded
 
 
 @router.get("/companies/{company_id}", response_model=CompanyResponse)
 async def get_company(company_id: int, _: AuthDep, db: DbDep):
-    result = await db.execute(
-        select(Company)
-        .options(selectinload(Company.events))
-        .where(Company.id == company_id)
-    )
-    company = result.scalar_one_or_none()
+    company = await _get_company_with_events(db, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     return company
@@ -69,8 +75,10 @@ async def update_company(company_id: int, body: CompanyUpdate, _: AuthDep, db: D
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(company, field, value)
     await db.commit()
-    await db.refresh(company)
-    return company
+    loaded = await _get_company_with_events(db, company_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return loaded
 
 
 @router.patch("/companies/{company_id}/stage", response_model=CompanyResponse)
@@ -102,8 +110,10 @@ async def update_stage(company_id: int, body: StageUpdateRequest, _: AuthDep, db
         stage_to=new_stage,
     ))
     await db.commit()
-    await db.refresh(company)
-    return company
+    loaded = await _get_company_with_events(db, company_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return loaded
 
 
 @router.post("/companies/{company_id}/events")
@@ -132,7 +142,9 @@ async def delete_company(company_id: int, _: AuthDep, db: DbDep):
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    await db.delete(company)
+    await db.execute(delete(Interview).where(Interview.company_id == company_id))
+    await db.execute(delete(CompanyEvent).where(CompanyEvent.company_id == company_id))
+    await db.execute(delete(Company).where(Company.id == company_id))
     await db.commit()
 
 

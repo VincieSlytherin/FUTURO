@@ -15,7 +15,7 @@ import FuturoLogo from "@/components/shared/FuturoLogo";
 const NAV = [
   { href: "/chat",       label: "Chat",       icon: MessageSquare },
   { href: "/jobs",       label: "Jobs",       icon: Briefcase     },
-  { href: "/campaign",   label: "Campaign",   icon: SquareKanban  },
+  { href: "/campaign",   label: "Company",    icon: SquareKanban  },
   { href: "/stories",    label: "Stories",    icon: BookOpen      },
   { href: "/resume",     label: "Resume",     icon: FileText      },
   { href: "/interviews", label: "Interviews", icon: Calendar      },

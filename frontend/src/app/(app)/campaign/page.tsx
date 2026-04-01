@@ -36,15 +36,19 @@ function AddCompanyModal({ onAdd, onClose }: { onAdd: (c: Company) => void; onCl
   const [priority, setPri]  = useState<Priority>("MEDIUM");
   const [notes, setNotes]   = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !role) return;
     setSaving(true);
+    setError(null);
     try {
       const company = await campaignApi.create({ name, role_title: role, url: url || undefined, priority, notes: notes || undefined });
       onAdd(company);
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add company");
     } finally {
       setSaving(false);
     }
@@ -88,6 +92,11 @@ function AddCompanyModal({ onAdd, onClose }: { onAdd: (c: Company) => void; onCl
             <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} className="input resize-none" rows={2} placeholder="Why this company, where you heard about it…" />
           </div>
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </div>
+          )}
           <div className="flex gap-3 pt-1">
             <button type="submit" disabled={saving || !name || !role}
               className="flex-1 py-2 bg-futuro-500 hover:bg-futuro-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
@@ -157,7 +166,7 @@ function CompanyCard({ company, onStageChange, onDelete }: {
   );
 }
 
-export default function CampaignPage() {
+export default function CompanyPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [stats,     setStats]     = useState<{ total_active: number; response_rate: number; offers: number } | null>(null);
   const [loading,   setLoading]   = useState(true);
@@ -187,7 +196,7 @@ export default function CampaignPage() {
       {/* Header */}
       <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
         <div className="flex items-center gap-4">
-          <h1 className="font-semibold text-gray-900">Campaign</h1>
+          <h1 className="font-semibold text-gray-900">Company</h1>
           {stats && (
             <span className="text-xs text-gray-500">
               {stats.total_active} active · {Math.round(stats.response_rate * 100)}% response rate · {stats.offers} offers
