@@ -9,6 +9,15 @@ function getToken(): string {
   return Cookies.get("futuro_token") ?? "";
 }
 
+function handleUnauthorized(detail?: string): never {
+  Cookies.remove("futuro_token");
+  if (typeof window !== "undefined") {
+    const message = detail ? `?reason=${encodeURIComponent(detail)}` : "";
+    window.location.href = `/login${message}`;
+  }
+  throw new Error(detail ?? "Session expired. Please sign in again.");
+}
+
 function headers(extra: Record<string, string> = {}): Record<string, string> {
   return {
     "Content-Type": "application/json",
@@ -22,11 +31,19 @@ export async function req<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { ...headers(), ...(init?.headers ?? {}) },
   });
+  if (res.status === 401) {
+    const err = await res.json().catch(() => ({ detail: "Session expired. Please sign in again." }));
+    return handleUnauthorized(err.detail);
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Request failed");
   }
-  return res.json();
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -73,8 +90,15 @@ export async function streamChat(
     body: JSON.stringify({ message, history }),
   });
 
+  if (res.status === 401) {
+    const err = await res.json().catch(() => ({ detail: "Session expired. Please sign in again." }));
+    callbacks.onError?.(new Error(err.detail ?? "Session expired. Please sign in again."));
+    handleUnauthorized(err.detail);
+  }
+
   if (!res.ok || !res.body) {
-    callbacks.onError?.(new Error("Chat request failed"));
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    callbacks.onError?.(new Error(err.detail ?? "Chat request failed"));
     return;
   }
 
@@ -160,8 +184,14 @@ export async function intakeUrl(url: string, callbacks: ChatCallbacks): Promise<
     headers: headers({ Accept: "text/event-stream" }),
     body: JSON.stringify({ url }),
   });
+  if (res.status === 401) {
+    const err = await res.json().catch(() => ({ detail: "Session expired. Please sign in again." }));
+    callbacks.onError?.(new Error(err.detail ?? "Session expired. Please sign in again."));
+    handleUnauthorized(err.detail);
+  }
   if (!res.ok || !res.body) {
-    callbacks.onError?.(new Error("Intake failed"));
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    callbacks.onError?.(new Error(err.detail ?? "Intake failed"));
     return;
   }
   const reader = res.body.getReader();

@@ -13,11 +13,12 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, update, delete
 
 from app.deps import AuthDep, DbDep, MemoryDep
 from app.models.db import ScoutConfig, ScoutRun, JobListing
 from app.workers.job_monitor import register_config, unregister_config
+from app.agents.job_scout import is_config_running
 
 router = APIRouter(prefix="/api/scout", tags=["scout"])
 
@@ -99,6 +100,28 @@ async def delete_config(config_id: int, _: AuthDep, db: DbDep):
     config = await db.get(ScoutConfig, config_id)
     if not config:
         raise HTTPException(404, "Config not found")
+
+    run_ids_result = await db.execute(
+        select(ScoutRun.id).where(ScoutRun.config_id == config_id)
+    )
+    run_ids = list(run_ids_result.scalars().all())
+
+    await db.execute(
+        update(JobListing)
+        .where(JobListing.config_id == config_id)
+        .values(config_id=None)
+    )
+
+    if run_ids:
+        await db.execute(
+            update(JobListing)
+            .where(JobListing.run_id.in_(run_ids))
+            .values(run_id=None)
+        )
+        await db.execute(
+            delete(ScoutRun).where(ScoutRun.id.in_(run_ids))
+        )
+
     await unregister_config(config_id)
     await db.delete(config)
     await db.commit()
@@ -118,12 +141,24 @@ async def manual_run(
     if not config:
         raise HTTPException(404, "Config not found")
 
-    # Check no run already in progress
+    # Check no run already in progress. If the DB says RUNNING but this process
+    # is not actually running that config anymore, recover the stale state.
     running = await db.execute(
-        select(ScoutRun).where(ScoutRun.config_id == config_id, ScoutRun.status == "RUNNING")
+        select(ScoutRun)
+        .where(ScoutRun.config_id == config_id, ScoutRun.status == "RUNNING")
+        .order_by(desc(ScoutRun.started_at))
     )
-    if running.scalar_one_or_none():
-        raise HTTPException(409, "A scan is already running for this config")
+    running_runs = running.scalars().all()
+    if running_runs:
+        if is_config_running(config_id):
+            raise HTTPException(409, "A scan is already running for this config")
+
+        now = datetime.now(timezone.utc)
+        for stale_run in running_runs:
+            stale_run.status = "ERROR"
+            stale_run.finished_at = now
+            stale_run.error_msg = "Recovered stale RUNNING state after a previous interruption"
+        await db.commit()
 
     async def _bg():
         from app.agents.job_scout import run_scout

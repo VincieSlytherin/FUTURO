@@ -16,6 +16,11 @@ from app.providers.base import TaskType
 from app.providers.router import get_provider
 
 logger = logging.getLogger(__name__)
+_active_config_runs: set[int] = set()
+
+
+def is_config_running(config_id: int) -> bool:
+    return config_id in _active_config_runs
 
 # ── Scraping ──────────────────────────────────────────────────────────────────
 
@@ -231,16 +236,18 @@ async def run_scout(
     from app.models.db import JobListing, ScoutRun, ScoutConfig
     from app.database import AsyncSessionLocal
 
-    # Create run record
-    async with AsyncSessionLocal() as db:
-        run = ScoutRun(config_id=config_id, status="RUNNING", started_at=datetime.now(timezone.utc))
-        db.add(run)
-        await db.commit()
-        await db.refresh(run)
-        run_id = run.id
-
+    _active_config_runs.add(config_id)
+    run_id: int | None = None
     try:
+        # Create run record
         # 1. Scrape
+        async with AsyncSessionLocal() as db:
+            run = ScoutRun(config_id=config_id, status="RUNNING", started_at=datetime.now(timezone.utc))
+            db.add(run)
+            await db.commit()
+            await db.refresh(run)
+            run_id = run.id
+
         raw_jobs = _scrape_jobs(search_term, location, sites, results_wanted, hours_old, distance, is_remote)
         logger.info(f"[scout:{config_id}] scraped {len(raw_jobs)} listings")
 
@@ -341,11 +348,14 @@ async def run_scout(
 
     except Exception as exc:
         logger.error(f"[scout:{config_id}] run failed: {exc}", exc_info=True)
-        async with AsyncSessionLocal() as db:
-            run = await db.get(ScoutRun, run_id)
-            if run:
-                run.status = "ERROR"
-                run.finished_at = datetime.now(timezone.utc)
-                run.error_msg = str(exc)[:500]
-                await db.commit()
+        if run_id is not None:
+            async with AsyncSessionLocal() as db:
+                run = await db.get(ScoutRun, run_id)
+                if run:
+                    run.status = "ERROR"
+                    run.finished_at = datetime.now(timezone.utc)
+                    run.error_msg = str(exc)[:500]
+                    await db.commit()
         raise
+    finally:
+        _active_config_runs.discard(config_id)

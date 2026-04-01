@@ -427,6 +427,7 @@ export default function JobsPage() {
   const [showAdd,   setShowAdd]    = useState(false);
   const [total,     setTotal]      = useState(0);
   const [page,      setPage]       = useState(0);
+  const [runNotice, setRunNotice]  = useState<string | null>(null);
   const PAGE_SIZE = 30;
 
   const loadJobs = useCallback(async (status: StatusFilter, score: number, p: number) => {
@@ -461,9 +462,21 @@ export default function JobsPage() {
   }
 
   async function handleRun(configId: number) {
-    const result = await scout.runConfig(configId);
-    if (result.queued) {
-      setTimeout(() => loadJobs(statusFilter, minScore, page), 8000);
+    try {
+      const result = await scout.runConfig(configId);
+      if (result.queued) {
+        setRunNotice("Scan started. New jobs should appear shortly.");
+        setTimeout(() => loadJobs(statusFilter, minScore, page), 8000);
+        setTimeout(() => {
+          Promise.all([scout.listConfigs(), scout.stats()]).then(([cs, st]) => {
+            setConfigs(cs);
+            setStats(st);
+          });
+        }, 2000);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not start scout run";
+      setRunNotice(message);
     }
   }
 
@@ -519,6 +532,18 @@ export default function JobsPage() {
               </button>
             </div>
           </div>
+
+          {runNotice && (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span>{runNotice}</span>
+              <button
+                onClick={() => setRunNotice(null)}
+                className="text-amber-700 hover:text-amber-900"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
 
           {/* Tabs + score filter */}
           <div className="flex items-center justify-between">

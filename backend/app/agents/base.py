@@ -138,6 +138,10 @@ class BaseAgent:
     async def post_process(
         self, response: str, message: str, ctx: AgentContext
     ) -> list[MemoryUpdate]:
+        if self._looks_like_resume_payload(message):
+            resume_updates = self._extract_resume_memory_updates(message)
+            if resume_updates:
+                return resume_updates
         return await self._extract_memory_updates(response, message, ctx)
 
     async def _extract_memory_updates(
@@ -255,21 +259,7 @@ class BaseAgent:
     def _fallback_memory_updates(self, message: str) -> list[MemoryUpdate]:
         if not self._looks_like_resume_payload(message):
             return []
-        lines = [line.strip(" -*\t") for line in message.splitlines()]
-        lines = [line for line in lines if line]
-        snippet = lines[:12]
-        if not snippet:
-            return []
-        bullets = "\n".join(f"- {line}" for line in snippet)
-        return [
-            MemoryUpdate(
-                file="resume_versions.md",
-                section="Bullets",
-                action="append",
-                content=bullets,
-                reason="Saved resume details shared in chat",
-            )
-        ]
+        return self._extract_resume_memory_updates(message)
 
     def _looks_like_resume_payload(self, message: str) -> bool:
         lowered = message.lower()
@@ -292,6 +282,204 @@ class BaseAgent:
             len(message.strip()) >= 200 and
             (bullet_like_lines >= 2 or sum(token in lowered for token in signals) >= 3)
         )
+
+    def _extract_resume_memory_updates(self, message: str) -> list[MemoryUpdate]:
+        text = self._resume_source_text(message)
+        if not text:
+            return []
+
+        summary = self._extract_resume_section(text, "Summary", "Professional Experience")
+        experience = self._extract_resume_section(text, "Professional Experience", "AI Projects")
+        projects = self._extract_resume_section(text, "AI Projects", "Education")
+        education = self._extract_resume_section(text, "Education", "Skills")
+        skills = self._extract_resume_section(text, "Skills", None)
+
+        experience_bullets = self._extract_resume_bullets(experience, limit=8)
+        project_bullets = self._extract_resume_bullets(projects, limit=4)
+        education_lines = self._extract_resume_education(education, limit=3)
+        skill_lines = self._extract_resume_skills(skills, limit=6)
+        summary_lines = self._extract_resume_summary(summary, limit=3)
+
+        resume_parts: list[str] = []
+        if summary_lines:
+            resume_parts.append("#### Imported summary")
+            resume_parts.extend(summary_lines)
+        if experience_bullets:
+            resume_parts.append("\n#### Professional experience highlights")
+            resume_parts.extend(experience_bullets)
+        if project_bullets:
+            resume_parts.append("\n#### Project highlights")
+            resume_parts.extend(project_bullets)
+        if education_lines:
+            resume_parts.append("\n#### Education")
+            resume_parts.extend(education_lines)
+        if skill_lines:
+            resume_parts.append("\n#### Skills")
+            resume_parts.extend(skill_lines)
+
+        who_i_am_lines: list[str] = []
+        target_role = self._infer_target_role(summary_lines, experience_bullets)
+        location = self._extract_resume_location(text)
+        if target_role or location:
+            who_i_am = "- " + " ".join(
+                part for part in [
+                    "Ran Ju" if "ran ju" in text.lower() else "",
+                    f"is {target_role}" if target_role else "",
+                    f"based in {location}." if location else "",
+                ]
+                if part
+            ).strip()
+            if who_i_am != "-":
+                who_i_am_lines.append(who_i_am)
+
+        updates: list[MemoryUpdate] = []
+        if resume_parts:
+            updates.append(
+                MemoryUpdate(
+                    file="resume_versions.md",
+                    section="Bullets",
+                    action="replace",
+                    content="\n".join(resume_parts).strip(),
+                    reason="Imported current resume snapshot from chat",
+                )
+            )
+        if who_i_am_lines:
+            updates.append(
+                MemoryUpdate(
+                    file="L0_identity.md",
+                    section="Who I am",
+                    action="replace",
+                    content="\n".join(who_i_am_lines).strip(),
+                    reason="Updated identity snapshot from imported resume",
+                )
+            )
+        if skill_lines:
+            updates.append(
+                MemoryUpdate(
+                    file="L0_identity.md",
+                    section="Technical skills",
+                    action="replace",
+                    content="\n".join(skill_lines).strip(),
+                    reason="Updated identity snapshot from imported resume",
+                )
+            )
+        return updates
+
+    def _resume_source_text(self, message: str) -> str:
+        text = message.replace("\\@", "@").replace("\\ ", " ")
+        text = re.sub(r"^This is my resume:\s*", "", text, flags=re.IGNORECASE)
+        start = re.search(r"=\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+", text)
+        if start:
+            text = text[start.start():]
+
+        text = re.sub(r"#link\(\"[^\"]+\"\)\[([^\]]+)\]", r"\1", text)
+        text = re.sub(r"#h\([^)]+\)", " ", text)
+        text = re.sub(r"#chiline\(\)", " ", text)
+        text = re.sub(r"#(?:show|set|let)\b.*?(?=(?:\s+=\s+[A-Z])|(?:\s+==\s+[A-Z])|$)", " ", text, flags=re.DOTALL)
+        text = re.sub(r"//\s*-\s.*?(?=(?:\s+-\s+)|(?:\s+==\s+[A-Z])|$)", " ", text, flags=re.DOTALL)
+        text = text.replace("//", " ")
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    def _extract_resume_section(self, text: str, start: str, end: str | None) -> str:
+        if end:
+            pattern = rf"==\s*{re.escape(start)}\s+(.*?)\s+==\s*{re.escape(end)}"
+        else:
+            pattern = rf"==\s*{re.escape(start)}\s+(.*)$"
+        match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+        return match.group(1).strip() if match else ""
+
+    def _extract_resume_bullets(self, text: str, limit: int) -> list[str]:
+        if not text:
+            return []
+        raw_bullets = re.findall(r"(?:^|\s)-\s+(.*?)(?=\s+-\s+|$)", text, re.DOTALL)
+        cleaned = [self._clean_resume_fragment(bullet) for bullet in raw_bullets]
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for bullet in cleaned:
+            if len(bullet) < 20:
+                continue
+            key = re.sub(r"[^a-z0-9]+", "", bullet.lower())
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            deduped.append(f"- {bullet}")
+            if len(deduped) >= limit:
+                break
+        return deduped
+
+    def _extract_resume_summary(self, text: str, limit: int) -> list[str]:
+        cleaned = self._clean_resume_fragment(text)
+        if not cleaned:
+            return []
+        sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+        result: list[str] = []
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if len(sentence) < 30:
+                continue
+            result.append(f"- {sentence}")
+            if len(result) >= limit:
+                break
+        return result
+
+    def _extract_resume_education(self, text: str, limit: int) -> list[str]:
+        entries = re.findall(r"\*([^*]+)\*\s+#h\(1fr\)\s+([^\\]+)\\\s+([^#]+?)#h\(1fr\)\s+_([^_]+)_", text)
+        result = []
+        for school, location, degree, dates in entries[:limit]:
+            line = self._clean_resume_fragment(f"{school} — {degree} — {location.strip()} — {dates.strip()}")
+            if line:
+                result.append(f"- {line}")
+        if result:
+            return result
+        cleaned = self._clean_resume_fragment(text)
+        return [f"- {cleaned}"] if cleaned else []
+
+    def _extract_resume_skills(self, text: str, limit: int) -> list[str]:
+        if not text:
+            return []
+        raw_bullets = re.findall(r"(?:^|\s)-\s+(.*?)(?=\s+-\s+|$)", text, re.DOTALL)
+        result: list[str] = []
+        seen: set[str] = set()
+        for bullet in raw_bullets:
+            cleaned = self._clean_resume_fragment(bullet)
+            if len(cleaned) < 12:
+                continue
+            key = re.sub(r"[^a-z0-9]+", "", cleaned.lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(f"- {cleaned}")
+            if len(result) >= limit:
+                break
+        return result
+
+    def _infer_target_role(self, summary_lines: list[str], experience_bullets: list[str]) -> str | None:
+        corpus = " ".join(summary_lines + experience_bullets)
+        candidates = [
+            "an Applied AI Engineer",
+            "an AI Systems Engineer",
+            "a GenAI Systems Engineer",
+            "a Machine Learning Engineer",
+        ]
+        lowered = corpus.lower()
+        for candidate in candidates:
+            role = candidate.replace("an ", "").replace("a ", "").lower()
+            if role in lowered:
+                return candidate
+        return None
+
+    def _extract_resume_location(self, text: str) -> str | None:
+        match = re.search(r"=\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\s+([A-Z][a-z]+,\s+[A-Z]{2})\s+\|", text)
+        return match.group(1).strip() if match else None
+
+    def _clean_resume_fragment(self, text: str) -> str:
+        cleaned = re.sub(r"#link\(\"[^\"]+\"\)\[([^\]]+)\]", r"\1", text)
+        cleaned = re.sub(r"#h\([^)]+\)", " ", cleaned)
+        cleaned = cleaned.replace("*", "").replace("_", "")
+        cleaned = cleaned.replace("`", "").replace("\\", "")
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        return cleaned.strip(" -;,.")
 
 
 class CoreAgent(BaseAgent):
