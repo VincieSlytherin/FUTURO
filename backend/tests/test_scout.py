@@ -19,7 +19,7 @@ os.environ.update({
     "GIT_AUTO_COMMIT": "false",
     "DEBUG": "true",
     "SCOUT_ENABLED": "false",   # Don't start scheduler in tests
-    "ALLOWED_ORIGINS": "http://localhost:3000",
+    "ALLOWED_ORIGINS": '["http://localhost:3000"]',
 })
 
 from app.main import app  # noqa: E402

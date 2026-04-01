@@ -1,11 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import clsx from "clsx";
 import type { Message } from "@/types";
 import MemoryUpdateCard from "./MemoryUpdateCard";
-import { useChatStore } from "@/lib/store";
 import FuturoLogo from "@/components/shared/FuturoLogo";
 
 interface Props {
@@ -23,7 +23,7 @@ const INTENT_LABELS: Record<string, string> = {
 };
 
 export default function MessageBubble({ message }: Props) {
-  const dismissUpdate = useChatStore((s) => s.dismissUpdate);
+  const [hiddenUpdates, setHiddenUpdates] = useState<number[]>([]);
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -94,11 +94,13 @@ export default function MessageBubble({ message }: Props) {
 
         {/* Memory update cards */}
         {message.proposedUpdates?.map((update, i) => (
+          hiddenUpdates.includes(i) ? null : (
           <MemoryUpdateCard
             key={i}
             update={update}
-            onDismiss={() => dismissUpdate(i)}
+            onDismiss={() => setHiddenUpdates((current) => [...current, i])}
           />
+          )
         ))}
       </div>
     </div>

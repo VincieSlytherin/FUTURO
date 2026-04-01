@@ -2,6 +2,7 @@ import bcrypt
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from unittest.mock import AsyncMock, patch
 
 # Patch settings before importing app
 import os
@@ -15,10 +16,11 @@ os.environ.update({
     "DB_PATH": "/tmp/futuro-test/data/futuro.db",
     "GIT_AUTO_COMMIT": "false",
     "DEBUG": "true",
-    "ALLOWED_ORIGINS": "http://localhost:3000",
+    "ALLOWED_ORIGINS": '["http://localhost:3000"]',
 })
 
 from app.main import app  # noqa: E402
+from app.models.schemas import MemoryUpdate  # noqa: E402
 
 
 @pytest_asyncio.fixture
@@ -150,3 +152,57 @@ async def test_story_rebuild_index(auth_client):
     resp = await auth_client.post("/api/stories/rebuild-index")
     assert resp.status_code == 200
     assert "stories_indexed" in resp.json()
+
+
+def test_memory_manager_appends_to_subheading():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+    from app.memory.manager import MemoryManager
+
+    with TemporaryDirectory() as tmp:
+        manager = MemoryManager(Path(tmp), git_auto_commit=False)
+        manager.apply_update(
+            filename="resume_versions.md",
+            section="Bullets",
+            action="append",
+            content="- Built an LLM evaluation pipeline with Python and SQL",
+            reason="test append",
+        )
+        content = manager.read("resume_versions.md")
+        assert "### Bullets" in content
+        assert "- Built an LLM evaluation pipeline with Python and SQL" in content
+        assert "\n## Bullets\n" not in content
+
+
+@pytest.mark.asyncio
+async def test_chat_auto_applies_memory_updates(auth_client):
+    class FakeAgent:
+        async def stream(self, message, history, ctx):
+            yield "Thanks, I saved that."
+
+        async def post_process(self, response, message, ctx):
+            return [
+                MemoryUpdate(
+                    file="resume_versions.md",
+                    section="Bullets",
+                    action="append",
+                    content="- Built production RAG pipelines and evaluation workflows",
+                    reason="Saved resume details shared in chat",
+                )
+            ]
+
+    with (
+        patch("app.api.chat.classify_intent", AsyncMock(return_value="RESUME")),
+        patch("app.api.chat.get_agent", return_value=FakeAgent()),
+    ):
+        resp = await auth_client.post("/api/chat", json={
+            "message": "Here is my resume. I built production RAG pipelines and evaluation workflows.",
+            "history": [],
+        })
+
+    assert resp.status_code == 200
+    assert '"applied": true' in resp.text.lower()
+
+    resume = await auth_client.get("/api/memory/resume_versions.md")
+    assert resume.status_code == 200
+    assert "Built production RAG pipelines and evaluation workflows" in resume.json()["content"]

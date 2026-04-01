@@ -21,7 +21,7 @@ os.environ.update({
     "LLM_PROVIDER": "claude",   # tests default to Claude (mocked)
     "OLLAMA_ENABLED": "false",
     "DEBUG": "true",
-    "ALLOWED_ORIGINS": "http://localhost:3000",
+    "ALLOWED_ORIGINS": '["http://localhost:3000"]',
 })
 
 

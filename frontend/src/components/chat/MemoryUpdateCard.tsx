@@ -15,7 +15,7 @@ export default function MemoryUpdateCard({ update, onDismiss }: Props) {
   const [editing,  setEditing]    = useState(false);
   const [editText, setEditText]   = useState(update.content);
   const [saving,   setSaving]     = useState(false);
-  const [saved,    setSaved]      = useState(false);
+  const [saved,    setSaved]      = useState(Boolean(update.applied));
 
   async function accept(content = editText) {
     setSaving(true);
@@ -78,7 +78,7 @@ export default function MemoryUpdateCard({ update, onDismiss }: Props) {
       <div className="flex items-center gap-2 px-4 pb-3">
         {saved ? (
           <span className="text-xs text-green-600 flex items-center gap-1">
-            <CheckCircle size={12}/> Saved
+            <CheckCircle size={12}/> {update.applied ? "Saved to memory" : "Saved"}
           </span>
         ) : (
           <>

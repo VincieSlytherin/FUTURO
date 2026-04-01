@@ -30,6 +30,7 @@ class MemoryUpdate(BaseModel):
     action: Literal["append", "replace", "create"]
     content: str
     reason: str
+    applied: bool = False
 
 
 # ── Memory ────────────────────────────────────────────────────────────────────

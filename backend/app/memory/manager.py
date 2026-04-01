@@ -159,22 +159,38 @@ class MemoryManager:
             self._commit(filename, f"[futuro] {short_reason}")
 
     def _append_to_section(self, content: str, header: str, new_text: str) -> str:
-        """Append new_text after the last line of the named ## section."""
-        pattern = rf"(^## {re.escape(header)}.*?)(?=^## |\Z)"
+        """Append new_text to a named markdown section, or to the file end."""
+        if not header.strip():
+            return self._append_to_file(content, new_text)
+
+        pattern = self._section_pattern(header)
         match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
         if not match:
             return content.rstrip() + f"\n\n## {header}\n\n{new_text}\n"
         section_text = match.group(1).rstrip()
-        replacement = section_text + "\n" + new_text
+        replacement = section_text + "\n" + new_text.strip()
         return content[: match.start()] + replacement + "\n" + content[match.end():]
 
     def _replace_section(self, content: str, header: str, new_text: str) -> str:
-        pattern = rf"^## {re.escape(header)}.*?(?=^## |\Z)"
-        replacement = f"## {header}\n\n{new_text}\n"
-        result = re.sub(pattern, replacement, content, flags=re.MULTILINE | re.DOTALL)
-        if result == content:
-            result = content.rstrip() + f"\n\n## {header}\n\n{new_text}\n"
-        return result
+        if not header.strip():
+            return new_text.strip() + "\n"
+
+        pattern = self._section_pattern(header)
+        match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+        if match:
+            heading_line = match.group(1).splitlines()[0]
+            replacement = f"{heading_line}\n\n{new_text.strip()}\n"
+            return content[: match.start()] + replacement + content[match.end():]
+        return content.rstrip() + f"\n\n## {header}\n\n{new_text}\n"
+
+    def _append_to_file(self, content: str, new_text: str) -> str:
+        new_text = new_text.strip()
+        if not content.strip():
+            return new_text + "\n"
+        return content.rstrip() + "\n\n" + new_text + "\n"
+
+    def _section_pattern(self, header: str) -> str:
+        return rf"(^#{{2,6}}\s+{re.escape(header)}\s*$.*?)(?=^#{{2,6}}\s+|\Z)"
 
     def _commit(self, filename: str, message: str) -> None:
         try:

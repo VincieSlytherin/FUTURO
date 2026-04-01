@@ -15,6 +15,7 @@ export interface MemoryUpdate {
   action: "append" | "replace" | "create";
   content: string;
   reason: string;
+  applied?: boolean;
 }
 
 export type Stage =
