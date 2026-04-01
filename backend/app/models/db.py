@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Text, Float, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -5,6 +6,16 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     pass
+
+
+def _load_json_list(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        return [str(item) for item in data if item]
+    except Exception:
+        return []
 
 
 class Company(Base):
@@ -20,6 +31,12 @@ class Company(Base):
     sponsorship_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     salary_range: Mapped[str | None] = mapped_column(String(100))
     source: Mapped[str | None] = mapped_column(String(200))
+    job_description_text: Mapped[str | None] = mapped_column(Text)
+    jd_summary: Mapped[str | None] = mapped_column(Text)
+    jd_requirements_json: Mapped[str | None] = mapped_column(Text)
+    jd_responsibilities_json: Mapped[str | None] = mapped_column(Text)
+    jd_skills_json: Mapped[str | None] = mapped_column(Text)
+    work_mode: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
     applied_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -27,6 +44,18 @@ class Company(Base):
 
     events: Mapped[list["CompanyEvent"]] = relationship(back_populates="company", order_by="CompanyEvent.happened_at.desc()")
     interviews: Mapped[list["Interview"]] = relationship(back_populates="company")
+
+    @property
+    def jd_requirements(self) -> list[str]:
+        return _load_json_list(self.jd_requirements_json)
+
+    @property
+    def jd_responsibilities(self) -> list[str]:
+        return _load_json_list(self.jd_responsibilities_json)
+
+    @property
+    def jd_skills(self) -> list[str]:
+        return _load_json_list(self.jd_skills_json)
 
 
 class CompanyEvent(Base):

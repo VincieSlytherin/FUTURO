@@ -29,7 +29,7 @@ setup: ## First-time setup: env, secrets, deps, local data dirs, memory repo
 	  git -C $(DATA_DIR)/memory config user.name "Futuro" && \
 	  git -C $(DATA_DIR)/memory commit --allow-empty -m "init memory repo"; \
 	fi
-	@echo "\n✓ Setup complete. Run 'make dev' to start. The SQLite schema will be created automatically on backend startup."
+	@echo "\n✓ Setup complete. Run 'make dev' to start. The SQLite schema will be migrated automatically on backend startup."
 
 # ── Development ───────────────────────────────────────────────────────────────
 
@@ -57,13 +57,12 @@ test-frontend: ## Run frontend tests (jest)
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
-migrate: ## No-op: database tables are created automatically on backend startup
-	@echo "No Alembic migration files are checked into this repo."
-	@echo "Start the backend once and SQLAlchemy will create the SQLite tables automatically."
+migrate: ## Run Alembic migrations to head
+	backend/.venv/bin/python backend/run_migrations.py
 
-migration: ## No-op: Alembic is not configured in the current repo snapshot
-	@echo "Alembic is not configured in the current repo snapshot."
-	@echo "If you want migrations, add backend/alembic/, alembic.ini, and a migration workflow first."
+migration: ## Create a new Alembic revision with autogenerate (use MSG="description")
+	@[ -n "$(MSG)" ] || (echo 'Usage: make migration MSG="add jd_summary to companies"' && exit 1)
+	backend/.venv/bin/alembic -c alembic.ini revision --autogenerate -m "$(MSG)"
 
 # ── Memory & Vector Store ─────────────────────────────────────────────────────
 

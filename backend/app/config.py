@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Memory
     git_auto_commit: bool = True
 
+    # Notifications
+    notify_email: str = ""
+    gmail_app_password: str = ""
+
     # ── Provider routing ──────────────────────────────────────────────────────
     # Global fallback: "claude" | "ollama" | "auto"
     # "auto" = probe Ollama at startup; use it if available, else Claude

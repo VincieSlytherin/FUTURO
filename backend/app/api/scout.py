@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc, update, delete
 
 from app.deps import AuthDep, DbDep, MemoryDep
+from app.jd_parser import enrich_company_from_jd
 from app.models.db import ScoutConfig, ScoutRun, JobListing
 from app.workers.job_monitor import register_config, unregister_config
 from app.agents.job_scout import is_config_running
@@ -264,12 +265,25 @@ async def add_to_pipeline(job_id: int, _: AuthDep, db: DbDep):
     )
     company = existing.scalar_one_or_none()
     if not company:
+        enriched = await enrich_company_from_jd(
+            url=job.job_url,
+            job_description_text=job.description,
+            salary_range=None,
+            sponsorship_confirmed=bool(job.sponsorship_likely),
+        )
         company = Company(
             name=job.company,
             role_title=job.title,
             url=job.job_url,
             source=f"scout:{job.site}",
             notes=f"Score {job.score}/100 — {job.score_summary}",
+            sponsorship_confirmed=bool(job.sponsorship_likely),
+            salary_range=(
+                f"{job.salary_currency or 'USD'} {int(job.salary_min):,} - {int(job.salary_max):,}"
+                if job.salary_min and job.salary_max else
+                (f"{job.salary_currency or 'USD'} {int(job.salary_min):,}+" if job.salary_min else None)
+            ),
+            **enriched,
         )
         db.add(company)
         await db.flush()

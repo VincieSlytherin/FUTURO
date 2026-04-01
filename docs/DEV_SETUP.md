@@ -8,7 +8,7 @@ If you follow it top to bottom, you should be able to:
 - create a working `.env`
 - start the backend
 - start the frontend
-- open `http://localhost:3000/login`
+- open `http://127.0.0.1:3000/login`
 - sign in successfully
 - choose providers from the Settings UI
 - pull Ollama models with live progress
@@ -31,12 +31,13 @@ Optional:
 
 The current repo snapshot works like this:
 
-- SQLite tables are created automatically on backend startup via SQLAlchemy `create_all()`
+- Alembic migrations are applied automatically on backend startup
+- existing pre-Alembic local SQLite databases are bootstrapped and stamped safely on first upgrade
 - the memory directory and its stub Markdown files are created automatically by the memory manager
 - the app can boot in auth/data-only mode even when Claude and Ollama are both not configured yet
-- there are no checked-in Alembic migration files in this snapshot
+- an initial Alembic baseline migration is checked into the repo
 
-Because of that, you do not need a migration step to get the app running locally.
+Because of that, you usually do not need a separate migration step to get the app running locally. Backend startup will run `alembic upgrade head` for you.
 
 ## Backend requirements
 
@@ -366,7 +367,16 @@ npx tsc --noEmit
 
 ### `make setup` or `make migrate` mentions Alembic
 
-The current repo snapshot does not include Alembic migration files. Database tables are created automatically on backend startup.
+That is expected now. Futuro uses Alembic migrations, and backend startup also applies them automatically.
+
+Useful commands:
+
+```bash
+make migrate
+make migration MSG="add jd_summary to companies"
+```
+
+If you already had a local database from the old pre-Alembic snapshot, use `make migrate` or just start the backend once. That path safely stamps the existing schema before future migrations.
 
 ### Login returns `401 Invalid password`
 

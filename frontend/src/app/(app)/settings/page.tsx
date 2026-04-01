@@ -96,6 +96,20 @@ interface InstructionConfigForm {
   intake_instruction: string;
 }
 
+interface NotificationConfigResponse {
+  notify_email: string;
+  gmail_app_password_configured: boolean;
+  notifications_enabled: boolean;
+  weekly_digest_schedule: string;
+}
+
+interface NotificationConfigForm {
+  notify_email: string;
+  gmail_app_password: string;
+}
+
+type NotificationKind = "scout" | "digest";
+
 type InstructionField =
   | "global_instruction"
   | "general_instruction"
@@ -292,6 +306,15 @@ export default function SettingsPage() {
   const [instructionError, setInstructionError] = useState<string | null>(null);
   const [instructionNote, setInstructionNote] = useState<string | null>(null);
   const [activeInstructionField, setActiveInstructionField] = useState<InstructionField>("bq_instruction");
+  const [notificationStatus, setNotificationStatus] = useState<NotificationConfigResponse | null>(null);
+  const [notificationForm, setNotificationForm] = useState<NotificationConfigForm>({
+    notify_email: "",
+    gmail_app_password: "",
+  });
+  const [notificationSaving, setNotificationSaving] = useState(false);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [notificationNote, setNotificationNote] = useState<string | null>(null);
+  const [sendingTest, setSendingTest] = useState<NotificationKind | null>(null);
   const [form,       setForm]       = useState<ProviderConfigForm>({
     llm_provider: "auto",
     chat_provider: "",
@@ -306,15 +329,21 @@ export default function SettingsPage() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [h, s, m] = await Promise.all([
+      const [h, s, m, notifications] = await Promise.all([
         apiFetch("/api/providers/health"),
         apiFetch("/api/providers/status"),
         apiFetch("/api/providers/models"),
+        apiFetch("/api/notifications"),
       ]);
       setHealth(h);
       setStatus(s);
       setRouting(s.routing ?? {});
       setOllamaModels(m.models ?? []);
+      setNotificationStatus(notifications);
+      setNotificationForm({
+        notify_email: notifications.notify_email ?? "",
+        gmail_app_password: "",
+      });
       const instructions = await apiFetch("/api/instructions") as InstructionConfigForm;
       setInstructionForm(instructions);
     } catch { /* ignore */ }
@@ -459,6 +488,55 @@ export default function SettingsPage() {
       setInstructionError(e.message ?? "Failed to save instructions");
     } finally {
       setInstructionSaving(false);
+    }
+  }
+
+  async function saveNotifications() {
+    setNotificationSaving(true);
+    setNotificationError(null);
+    setNotificationNote(null);
+
+    try {
+      const next = await apiFetch("/api/notifications", {
+        method: "PUT",
+        body: JSON.stringify(notificationForm),
+      }) as NotificationConfigResponse & { saved: boolean };
+      setNotificationStatus(next);
+      setNotificationForm((current) => ({
+        ...current,
+        notify_email: next.notify_email ?? "",
+        gmail_app_password: "",
+      }));
+      setNotificationNote("Saved. Futuro can now send scout alerts and weekly digest emails.");
+    } catch (e: any) {
+      setNotificationError(e.message ?? "Failed to save email settings");
+    } finally {
+      setNotificationSaving(false);
+    }
+  }
+
+  async function sendTestEmail(kind: NotificationKind) {
+    setSendingTest(kind);
+    setNotificationError(null);
+    setNotificationNote(null);
+
+    try {
+      const res = await apiFetch("/api/notifications/test", {
+        method: "POST",
+        body: JSON.stringify({
+          kind,
+          ...notificationForm,
+        }),
+      }) as { message: string; notify_email: string };
+      setNotificationNote(res.message);
+      setNotificationStatus((current) => current ? ({
+        ...current,
+        notify_email: res.notify_email,
+      }) : current);
+    } catch (e: any) {
+      setNotificationError(e.message ?? "Failed to send test email");
+    } finally {
+      setSendingTest(null);
     }
   }
 
@@ -748,6 +826,102 @@ export default function SettingsPage() {
               <p className="mt-2 text-xs text-gray-400">
                 Tip: write concrete rules like tone, structure, scoring rubric, what to prioritize, or what to avoid.
               </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Email notifications ────────────────────────────────────────── */}
+        <section>
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700">Email notifications</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Connect Gmail with an App Password. Futuro will send scout-complete alerts right away and a weekly digest every Monday at 8:00 AM local time.
+              </p>
+            </div>
+            <button
+              onClick={saveNotifications}
+              disabled={notificationSaving}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-futuro-500 hover:bg-futuro-600 disabled:opacity-50 text-white rounded-lg transition-colors flex-shrink-0"
+            >
+              {notificationSaving ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+              {notificationSaving ? "Saving…" : "Save email settings"}
+            </button>
+          </div>
+
+          {(notificationNote || notificationError) && (
+            <div className={clsx(
+              "mb-4 rounded-xl border px-4 py-3 text-xs",
+              notificationError ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"
+            )}>
+              {notificationError ?? notificationNote}
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-xs font-medium text-gray-600">Notify email</span>
+                <input
+                  type="email"
+                  value={notificationForm.notify_email}
+                  onChange={(e) => setNotificationForm((current) => ({ ...current, notify_email: e.target.value }))}
+                  placeholder="you@gmail.com"
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-futuro-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-medium text-gray-600">Gmail App Password</span>
+                <input
+                  type="password"
+                  value={notificationForm.gmail_app_password}
+                  onChange={(e) => setNotificationForm((current) => ({ ...current, gmail_app_password: e.target.value }))}
+                  placeholder={notificationStatus?.gmail_app_password_configured ? "Already saved. Leave blank to keep it." : "xxxx xxxx xxxx xxxx"}
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-futuro-500"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-xs font-medium text-gray-600">Immediate scout alerts</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Sent after every scout run. Includes new jobs at or above the config threshold with score, salary, H-1B signal, and the fit reason.
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-xs font-medium text-gray-600">Weekly digest</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Every Monday at 8:00 AM local time. Includes top jobs, pipeline movement, applications sent, next-week focus, and a short encouragement line.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => sendTestEmail("scout")}
+                disabled={sendingTest !== null}
+                className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-gray-700"
+              >
+                {sendingTest === "scout" ? <RefreshCw size={12} className="animate-spin" /> : <Download size={12} />}
+                {sendingTest === "scout" ? "Sending scout test…" : "Send scout test"}
+              </button>
+              <button
+                onClick={() => sendTestEmail("digest")}
+                disabled={sendingTest !== null}
+                className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-gray-700"
+              >
+                {sendingTest === "digest" ? <RefreshCw size={12} className="animate-spin" /> : <Download size={12} />}
+                {sendingTest === "digest" ? "Sending digest test…" : "Send weekly digest test"}
+              </button>
+              {notificationStatus?.gmail_app_password_configured && (
+                <span className="text-xs text-gray-500">App Password is already saved.</span>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
+              Use a Gmail App Password, not your normal Gmail login password. The same Gmail address is used as both sender and recipient.
             </div>
           </div>
         </section>

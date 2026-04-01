@@ -19,11 +19,12 @@ This README is written as a practical setup guide. If you follow it top to botto
 
 ## What works in the current repo snapshot
 
-- the backend creates SQLite tables automatically on startup
+- the backend applies Alembic migrations automatically on startup
+- existing pre-Alembic local SQLite databases are bootstrapped and stamped safely on first upgrade
 - the memory directory is created automatically when first used
 - the app can boot in auth/data-only mode even if Claude and Ollama are both not configured yet
 - chat and provider-backed features need either a real Anthropic key or a working Ollama setup
-- there are no checked-in Alembic migration files in this snapshot
+- an initial Alembic baseline migration is checked into the repo
 
 ## Main features
 
@@ -167,6 +168,25 @@ With that setup:
 - login will work
 - database and memory routes will work
 - chat will stay unavailable until you configure Claude or Ollama
+
+## Database migrations
+
+Futuro now uses Alembic for SQLite schema changes.
+
+Current behavior:
+
+- backend startup runs `alembic upgrade head`
+- if you already had a local database from the old pre-Alembic snapshot, Futuro will preserve it and stamp the current baseline instead of trying to recreate every table
+- you can still run migrations manually if you want an explicit step
+
+Useful commands:
+
+```bash
+make migrate
+make migration MSG="add jd_summary to companies"
+```
+
+For an older local database created before Alembic was added, prefer `make migrate` or normal backend startup over running raw `alembic upgrade head` yourself. Futuro's wrapper handles the legacy bootstrap safely.
 
 ## Optional provider setup
 
@@ -318,7 +338,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 Expected result:
 
 - backend starts on `http://127.0.0.1:8000`
-- SQLite tables are created automatically on first boot
+- Alembic migrations are applied automatically on first boot
 
 ### Terminal 2: frontend
 

@@ -51,6 +51,12 @@ export interface Company {
   sponsorship_confirmed: boolean;
   salary_range: string | null;
   source: string | null;
+  job_description_text: string | null;
+  jd_summary: string | null;
+  jd_requirements: string[];
+  jd_responsibilities: string[];
+  jd_skills: string[];
+  work_mode: string | null;
   created_at: string;
   updated_at: string;
   applied_at: string | null;

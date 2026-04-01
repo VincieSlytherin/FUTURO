@@ -166,7 +166,7 @@ export const memory = {
 export const campaign = {
   list: (stage?: string) =>
     req<Company[]>(`/api/campaign/companies${stage ? `?stage=${stage}` : ""}`),
-  create: (data: { name: string; role_title: string; url?: string; priority?: string; notes?: string }) =>
+  create: (data: { name: string; role_title: string; url?: string; priority?: string; notes?: string; job_description_text?: string }) =>
     req<Company>("/api/campaign/companies", { method: "POST", body: JSON.stringify(data) }),
   updateStage: (id: number, stage: string, description?: string) =>
     req<Company>(`/api/campaign/companies/${id}/stage`, {

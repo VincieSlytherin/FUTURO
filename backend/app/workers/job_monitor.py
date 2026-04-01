@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 
@@ -52,6 +53,17 @@ async def _run_config(config_id: int) -> None:
         logger.info(f"[monitor] config {config_id} '{config.name}': {result}")
     except Exception as exc:
         logger.error(f"[monitor] config {config_id} failed: {exc}")
+
+
+async def _run_weekly_digest() -> None:
+    from app.notifications import EmailNotificationService
+
+    try:
+        sent = await EmailNotificationService().send_weekly_digest()
+        if sent:
+            logger.info("[monitor] weekly digest email sent")
+    except Exception as exc:
+        logger.error(f"[monitor] weekly digest failed: {exc}")
 
 
 async def register_config(config_id: int, schedule_hours: int) -> None:
@@ -98,6 +110,19 @@ async def start_scheduler() -> None:
 
     for config in configs:
         await register_config(config.id, config.schedule_hours)
+
+    _scheduler.add_job(
+        _run_weekly_digest,
+        trigger=CronTrigger(
+            day_of_week="mon",
+            hour=8,
+            minute=0,
+            timezone=datetime.now().astimezone().tzinfo,
+        ),
+        id="weekly_digest",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
 
     logger.info(f"[monitor] scheduler started, {len(configs)} active configs loaded")
 

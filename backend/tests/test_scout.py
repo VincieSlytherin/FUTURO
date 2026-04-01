@@ -2,6 +2,7 @@
 Tests for Job Scout: scraping mock, scoring, API endpoints, dedup logic.
 """
 import json
+import bcrypt
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -11,7 +12,7 @@ import os
 os.environ.update({
     "ANTHROPIC_API_KEY": "sk-ant-test",
     "JWT_SECRET": "test-secret-32-chars-long-enough-x",
-    "USER_PASSWORD_HASH": "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGM4e1sAnBZaOEf5RQD8vFv6Bmy",  # "testpass"
+    "USER_PASSWORD_HASH": bcrypt.hashpw(b"testpass", bcrypt.gensalt()).decode(),
     "DATA_DIR": "/tmp/futuro-scout-test/data",
     "MEMORY_DIR": "/tmp/futuro-scout-test/data/memory",
     "CHROMA_DIR": "/tmp/futuro-scout-test/data/chroma",
@@ -27,6 +28,14 @@ from app.main import app  # noqa: E402
 
 @pytest_asyncio.fixture
 async def auth_client():
+    from app.config import settings
+    from app.database import init_db
+
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.memory_dir.mkdir(parents=True, exist_ok=True)
+    settings.chroma_dir.mkdir(parents=True, exist_ok=True)
+    await init_db()
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post("/api/auth/login", json={"password": "testpass"})
         c.headers["Authorization"] = f"Bearer {resp.json()['access_token']}"

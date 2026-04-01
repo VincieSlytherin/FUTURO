@@ -12,6 +12,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.memory.manager import MemoryManager
+from app.notifications import EmailNotificationService, notifications_enabled
 from app.providers.base import TaskType
 from app.providers.router import get_provider
 
@@ -375,6 +376,38 @@ async def run_scout(
             run_id,
             error_msg=f"Completed — {len(new_jobs)} new, {scored} scored, {len(high_score)} above threshold",
         )
+
+        if notifications_enabled():
+            high_score_jobs = [
+                {
+                    "title": listing.title,
+                    "company": listing.company,
+                    "job_url": listing.job_url,
+                    "location": listing.location,
+                    "salary_min": listing.salary_min,
+                    "salary_max": listing.salary_max,
+                    "salary_currency": listing.salary_currency,
+                    "score": listing.score,
+                    "score_summary": listing.score_summary,
+                    "sponsorship_likely": listing.sponsorship_likely,
+                    "site": listing.site,
+                }
+                for listing in high_score
+            ]
+            try:
+                await EmailNotificationService(memory=memory).send_scout_run_summary(
+                    config_name=config.name if config else search_term,
+                    search_term=search_term,
+                    location=location,
+                    min_score=min_score,
+                    jobs_found=len(raw_jobs),
+                    jobs_new=len(new_jobs),
+                    jobs_scored=scored,
+                    jobs=high_score_jobs,
+                )
+            except Exception as exc:
+                logger.warning(f"[scout:{config_id}] email notification failed: {exc}")
+
         logger.info(f"[scout:{config_id}] done — {len(new_jobs)} new, {len(high_score)} above threshold")
         return {
             "jobs_found": len(raw_jobs),

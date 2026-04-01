@@ -68,13 +68,18 @@ class CompanyCreate(BaseModel):
     sponsorship_confirmed: bool = False
     salary_range: str | None = None
     source: str | None = None
+    job_description_text: str | None = None
 
 class CompanyUpdate(BaseModel):
+    role_title: str | None = None
+    url: str | None = None
     stage: str | None = None
     priority: str | None = None
     notes: str | None = None
     salary_range: str | None = None
     sponsorship_confirmed: bool | None = None
+    source: str | None = None
+    job_description_text: str | None = None
 
 class StageUpdateRequest(BaseModel):
     stage: str
@@ -101,6 +106,12 @@ class CompanyResponse(BaseModel):
     sponsorship_confirmed: bool
     salary_range: str | None
     source: str | None
+    job_description_text: str | None
+    jd_summary: str | None
+    jd_requirements: list[str] = []
+    jd_responsibilities: list[str] = []
+    jd_skills: list[str] = []
+    work_mode: str | None
     created_at: datetime
     updated_at: datetime
     applied_at: datetime | None

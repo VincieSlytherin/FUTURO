@@ -4,6 +4,7 @@ from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.deps import AuthDep, DbDep
+from app.jd_parser import enrich_company_from_jd
 from app.models.db import Company, CompanyEvent, Interview
 from app.models.schemas import (
     CompanyCreate, CompanyUpdate, CompanyResponse,
@@ -42,7 +43,15 @@ async def list_companies(
 
 @router.post("/companies", response_model=CompanyResponse, status_code=201)
 async def create_company(body: CompanyCreate, _: AuthDep, db: DbDep):
-    company = Company(**body.model_dump())
+    payload = body.model_dump()
+    payload.update(await enrich_company_from_jd(
+        url=payload.get("url"),
+        job_description_text=payload.get("job_description_text"),
+        salary_range=payload.get("salary_range"),
+        sponsorship_confirmed=payload.get("sponsorship_confirmed", False),
+    ))
+
+    company = Company(**payload)
     db.add(company)
     # Log creation event
     db.add(CompanyEvent(
@@ -72,7 +81,16 @@ async def update_company(company_id: int, body: CompanyUpdate, _: AuthDep, db: D
     company = result.scalar_one_or_none()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    for field, value in body.model_dump(exclude_none=True).items():
+    updates = body.model_dump(exclude_none=True)
+    if "url" in updates or "job_description_text" in updates:
+        updates.update(await enrich_company_from_jd(
+            url=updates.get("url", company.url),
+            job_description_text=updates.get("job_description_text", company.job_description_text),
+            salary_range=updates.get("salary_range", company.salary_range),
+            sponsorship_confirmed=updates.get("sponsorship_confirmed", company.sponsorship_confirmed),
+        ))
+
+    for field, value in updates.items():
         setattr(company, field, value)
     await db.commit()
     loaded = await _get_company_with_events(db, company_id)

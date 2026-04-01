@@ -1,6 +1,7 @@
 import bcrypt
 import pytest
 import pytest_asyncio
+from uuid import uuid4
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, patch
 
@@ -113,6 +114,121 @@ async def test_custom_instructions_api_round_trip(auth_client, tmp_path, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_notifications_api_round_trip(auth_client, tmp_path, monkeypatch):
+    from app.config import settings
+    from app.api import notifications as notifications_api
+
+    monkeypatch.setattr(notifications_api, "ENV_PATH", tmp_path / ".env")
+    monkeypatch.setattr(settings, "notify_email", "")
+    monkeypatch.setattr(settings, "gmail_app_password", "")
+
+    get_resp = await auth_client.get("/api/notifications")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["notifications_enabled"] is False
+
+    put_resp = await auth_client.put("/api/notifications", json={
+        "notify_email": "user@example.com",
+        "gmail_app_password": "abcd efgh ijkl mnop",
+    })
+    assert put_resp.status_code == 200
+    payload = put_resp.json()
+    assert payload["notify_email"] == "user@example.com"
+    assert payload["gmail_app_password_configured"] is True
+    assert payload["notifications_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_notifications_test_endpoint(auth_client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "notify_email", "user@example.com")
+    monkeypatch.setattr(settings, "gmail_app_password", "abcd efgh ijkl mnop")
+
+    with patch("app.api.notifications.EmailNotificationService.build_test_scout_jobs", AsyncMock(return_value=[])), \
+         patch("app.api.notifications.EmailNotificationService.send_scout_run_summary", AsyncMock(return_value=True)) as send_mock:
+        resp = await auth_client.post("/api/notifications/test", json={"kind": "scout"})
+
+    assert resp.status_code == 200
+    assert resp.json()["sent"] is True
+    assert send_mock.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_run_scout_triggers_email_notification(monkeypatch):
+    from app.config import settings
+    from app.database import init_db
+    from app.memory.manager import MemoryManager
+    from app.database import AsyncSessionLocal
+    from app.models.db import ScoutConfig
+    from app.agents.job_scout import run_scout
+
+    monkeypatch.setattr(settings, "notify_email", "user@example.com")
+    monkeypatch.setattr(settings, "gmail_app_password", "abcdefghijklmnop")
+
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.memory_dir.mkdir(parents=True, exist_ok=True)
+    settings.chroma_dir.mkdir(parents=True, exist_ok=True)
+    await init_db()
+
+    async with AsyncSessionLocal() as db:
+        config = ScoutConfig(
+            name="Notify test",
+            search_term="AI Engineer",
+            location="Remote",
+            min_score=70,
+        )
+        db.add(config)
+        await db.commit()
+        await db.refresh(config)
+
+    memory = MemoryManager(settings.memory_dir, git_auto_commit=False)
+    mock_score = {
+        "score": 82,
+        "score_summary": "Strong match.",
+        "score_pros": '["Good fit"]',
+        "score_cons": '[]',
+        "sponsorship_likely": True,
+    }
+
+    with patch("app.agents.job_scout._scrape_jobs", return_value=[
+            {
+                "title": "Applied AI Engineer",
+                "company": "Sample AI Co",
+                "job_url": "https://example.com/jobs/1",
+                "url_hash": uuid4().hex,
+                "location": "Remote",
+                "is_remote": True,
+                "salary_min": 180000,
+                "salary_max": 220000,
+                "salary_currency": "USD",
+                "description": "Build production LLM systems.",
+                "description_snippet": "Build production LLM systems.",
+                "site": "linkedin",
+                "date_posted": "today",
+                "job_type": "full-time",
+            }
+        ]), \
+         patch("app.agents.job_scout.score_job", AsyncMock(return_value=mock_score)), \
+         patch("app.agents.job_scout.EmailNotificationService.send_scout_run_summary", AsyncMock(return_value=True)) as send_mock:
+        result = await run_scout(
+            config_id=config.id,
+            search_term=config.search_term,
+            location=config.location,
+            sites=["linkedin"],
+            results_wanted=10,
+            hours_old=72,
+            distance=50,
+            is_remote=None,
+            min_score=config.min_score,
+            memory=memory,
+            db_session=None,
+        )
+
+    assert result["jobs_new"] >= 1
+    assert send_mock.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_write_memory_file(auth_client):
     new_content = "# L0 · Core Identity\n\nTest content.\n"
     resp = await auth_client.put(
@@ -141,6 +257,34 @@ async def test_campaign_create_and_list(auth_client):
     assert "Anthropic" in names
 
     await auth_client.delete(f"/api/campaign/companies/{company_id}")
+
+
+@pytest.mark.asyncio
+async def test_campaign_create_extracts_jd_fields(auth_client):
+    resp = await auth_client.post("/api/campaign/companies", json={
+        "name": "OpenAI",
+        "role_title": "Applied AI Engineer",
+        "job_description_text": """
+Responsibilities
+- Build production RAG systems
+- Work with Python and FastAPI services
+
+Requirements
+- 3+ years with Python
+- Experience with LLM applications and AWS
+- Hybrid work model
+- Visa sponsorship available
+        """,
+    })
+    assert resp.status_code == 201
+    payload = resp.json()
+    assert payload["jd_summary"]
+    assert "Python" in payload["jd_skills"]
+    assert any("RAG" in item or "LLM" in item for item in payload["jd_requirements"])
+    assert payload["work_mode"] == "HYBRID"
+    assert payload["sponsorship_confirmed"] is True
+
+    await auth_client.delete(f"/api/campaign/companies/{payload['id']}")
 
 
 @pytest.mark.asyncio

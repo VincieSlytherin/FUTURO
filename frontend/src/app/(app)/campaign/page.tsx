@@ -35,6 +35,7 @@ function AddCompanyModal({ onAdd, onClose }: { onAdd: (c: Company) => void; onCl
   const [url, setUrl]       = useState("");
   const [priority, setPri]  = useState<Priority>("MEDIUM");
   const [notes, setNotes]   = useState("");
+  const [jobDescription, setJobDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState<string | null>(null);
 
@@ -44,7 +45,14 @@ function AddCompanyModal({ onAdd, onClose }: { onAdd: (c: Company) => void; onCl
     setSaving(true);
     setError(null);
     try {
-      const company = await campaignApi.create({ name, role_title: role, url: url || undefined, priority, notes: notes || undefined });
+      const company = await campaignApi.create({
+        name,
+        role_title: role,
+        url: url || undefined,
+        priority,
+        notes: notes || undefined,
+        job_description_text: jobDescription || undefined,
+      });
       onAdd(company);
       onClose();
     } catch (err) {
@@ -91,6 +99,19 @@ function AddCompanyModal({ onAdd, onClose }: { onAdd: (c: Company) => void; onCl
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} className="input resize-none" rows={2} placeholder="Why this company, where you heard about it…" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Job description text</label>
+            <textarea
+              value={jobDescription}
+              onChange={e => setJobDescription(e.target.value)}
+              className="input resize-none"
+              rows={5}
+              placeholder="Paste the JD here to auto-fill a summary, skills, and key requirements."
+            />
+            <p className="mt-1 text-[11px] text-gray-400">
+              If you leave this empty but add a job URL, Futuro will try to fetch the page and extract the same fields automatically.
+            </p>
           </div>
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -159,6 +180,61 @@ function CompanyCard({ company, onStageChange, onDelete }: {
               </button>
             ))}
           </div>
+          {(company.work_mode || company.sponsorship_confirmed || company.salary_range) && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {company.work_mode && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{company.work_mode}</span>
+              )}
+              {company.sponsorship_confirmed && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700">H-1B / visa signal</span>
+              )}
+              {company.salary_range && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{company.salary_range}</span>
+              )}
+            </div>
+          )}
+          {company.jd_summary && (
+            <div className="mt-2">
+              <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">JD summary</p>
+              <p className="text-xs text-gray-600 leading-5">{company.jd_summary}</p>
+            </div>
+          )}
+          {company.jd_skills.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Key skills</p>
+              <div className="flex flex-wrap gap-1.5">
+                {company.jd_skills.slice(0, 8).map((skill) => (
+                  <span key={skill} className="text-[11px] px-2 py-0.5 rounded-full bg-futuro-50 text-futuro-700">
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {company.jd_requirements.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Top requirements</p>
+              <ul className="space-y-1">
+                {company.jd_requirements.slice(0, 4).map((item, index) => (
+                  <li key={`${company.id}-req-${index}`} className="text-xs text-gray-600 leading-5">
+                    • {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {company.jd_responsibilities.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-1">Responsibilities</p>
+              <ul className="space-y-1">
+                {company.jd_responsibilities.slice(0, 4).map((item, index) => (
+                  <li key={`${company.id}-resp-${index}`} className="text-xs text-gray-600 leading-5">
+                    • {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {company.notes && <p className="text-xs text-gray-500 mt-2 italic">{company.notes}</p>}
         </div>
       )}
