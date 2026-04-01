@@ -79,3 +79,15 @@ export interface MemoryFile {
   last_modified: string | null;
   last_commit: string | null;
 }
+
+export interface Interview {
+  id: number;
+  company_id: number;
+  round_name: string;
+  format: string | null;
+  interviewer: string | null;
+  gut_feeling: number | null;
+  scheduled_at: string | null;
+  happened_at: string | null;
+  created_at: string;
+}

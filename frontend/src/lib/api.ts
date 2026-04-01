@@ -1,6 +1,6 @@
 import Cookies from "js-cookie";
 import type {
-  Company, CampaignStats, StorySearchResult, MemoryFile, MemoryUpdate
+  Company, CampaignStats, StorySearchResult, MemoryFile, MemoryUpdate, Interview
 } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -174,6 +174,23 @@ export const stories = {
     }),
   raw: () => req<{ content: string }>("/api/stories/raw"),
   rebuildIndex: () => req<{ stories_indexed: number; duration_ms: number }>("/api/stories/rebuild-index", { method: "POST" }),
+};
+
+// ── Interviews ───────────────────────────────────────────────────────────────
+
+export const interviews = {
+  list: () => req<Interview[]>("/api/interviews"),
+  create: (data: {
+    company_id: number;
+    round_name: string;
+    format?: string;
+    interviewer?: string;
+    scheduled_at?: string | null;
+  }) =>
+    req<Interview>("/api/interviews", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // ── Intake ────────────────────────────────────────────────────────────────────
