@@ -17,7 +17,10 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
     ...opts,
     headers: { Authorization: `Bearer ${getCookie("futuro_token")}`, "Content-Type": "application/json", ...(opts.headers ?? {}) },
   });
-  if (!res.ok) throw new Error(`${res.status}`);
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail ?? `${res.status}`);
+  }
   return res.json();
 }
 
@@ -27,6 +30,27 @@ interface ProviderHealth {
   detail: string;
   embed_model?: string;
   available_models?: string[];
+}
+
+type GlobalProviderValue = "auto" | "ollama" | "claude";
+type ProviderOverrideValue = "" | "ollama" | "claude";
+type TaskProviderField = "chat_provider" | "classify_provider" | "score_provider" | "embed_provider";
+
+interface ProviderStatusResponse {
+  routing: Record<string, { provider: string; model: string }>;
+  config: {
+    llm_provider: GlobalProviderValue;
+    chat_provider: "ollama" | "claude" | null;
+    classify_provider: "ollama" | "claude" | null;
+    score_provider: "ollama" | "claude" | null;
+    embed_provider: "ollama" | "claude" | null;
+  };
+  ollama: {
+    enabled: boolean;
+    base_url: string;
+    chat_model: string;
+    embed_model: string;
+  };
 }
 
 interface OllamaModel {
@@ -42,6 +66,17 @@ interface PullEvent {
   digest?: string;
   error?: string;
   model?: string;
+}
+
+interface ProviderConfigForm {
+  llm_provider: GlobalProviderValue;
+  chat_provider: ProviderOverrideValue;
+  classify_provider: ProviderOverrideValue;
+  score_provider: ProviderOverrideValue;
+  embed_provider: ProviderOverrideValue;
+  ollama_enabled: boolean;
+  ollama_chat_model: string;
+  ollama_embed_model: string;
 }
 
 const QWEN_MODELS = [
@@ -208,9 +243,22 @@ export default function SettingsPage() {
   const [health,     setHealth]     = useState<Record<string, ProviderHealth>>({});
   const [routing,    setRouting]    = useState<Record<string, { provider: string; model: string }>>({});
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
-  const [status,     setStatus]     = useState<any>(null);
+  const [status,     setStatus]     = useState<ProviderStatusResponse | null>(null);
   const [loading,    setLoading]    = useState(true);
   const [pulling,    setPulling]    = useState<string | null>(null);
+  const [saving,     setSaving]     = useState(false);
+  const [saveError,  setSaveError]  = useState<string | null>(null);
+  const [saveNote,   setSaveNote]   = useState<string | null>(null);
+  const [form,       setForm]       = useState<ProviderConfigForm>({
+    llm_provider: "auto",
+    chat_provider: "",
+    classify_provider: "",
+    score_provider: "",
+    embed_provider: "",
+    ollama_enabled: true,
+    ollama_chat_model: "qwen2.5:7b",
+    ollama_embed_model: "nomic-embed-text",
+  });
 
   async function loadAll() {
     setLoading(true);
@@ -230,11 +278,115 @@ export default function SettingsPage() {
 
   useEffect(() => { loadAll(); }, []);
 
+  useEffect(() => {
+    if (!status) return;
+    setForm({
+      llm_provider: status.config?.llm_provider ?? "auto",
+      chat_provider: status.config?.chat_provider ?? "",
+      classify_provider: status.config?.classify_provider ?? "",
+      score_provider: status.config?.score_provider ?? "",
+      embed_provider: status.config?.embed_provider ?? "",
+      ollama_enabled: status.ollama?.enabled ?? true,
+      ollama_chat_model: status.ollama?.chat_model ?? "qwen2.5:7b",
+      ollama_embed_model: status.ollama?.embed_model ?? "nomic-embed-text",
+    });
+  }, [status]);
+
   const pulledIds = new Set(ollamaModels.map(m => m.name));
+  const chatModelOptions = Array.from(new Set([
+    ...QWEN_MODELS.map(m => m.id),
+    ...ollamaModels.map(m => m.name),
+    form.ollama_chat_model,
+  ]));
+  const embedModelOptions = Array.from(new Set([
+    ...EMBED_MODELS.map(m => m.id),
+    ...ollamaModels.map(m => m.name),
+    form.ollama_embed_model,
+  ]));
 
   const TASK_LABELS: Record<string, string> = {
     chat: "Chat", classify: "Classify", score: "Score", embed: "Embed",
   };
+
+  function setTaskProvider(field: TaskProviderField, value: ProviderOverrideValue) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function applyPreset(mode: "prefer_ollama" | "ollama_only" | "claude_only") {
+    setSaveError(null);
+    setSaveNote(null);
+
+    if (mode === "prefer_ollama") {
+      setForm((current) => ({
+        ...current,
+        llm_provider: "auto",
+        chat_provider: "",
+        classify_provider: "",
+        score_provider: "",
+        embed_provider: "",
+        ollama_enabled: true,
+      }));
+      return;
+    }
+
+    if (mode === "ollama_only") {
+      setForm((current) => ({
+        ...current,
+        llm_provider: "ollama",
+        chat_provider: "",
+        classify_provider: "",
+        score_provider: "",
+        embed_provider: "",
+        ollama_enabled: true,
+      }));
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      llm_provider: "claude",
+      chat_provider: "",
+      classify_provider: "",
+      score_provider: "",
+      embed_provider: "",
+      ollama_enabled: current.ollama_enabled,
+    }));
+  }
+
+  async function saveConfig() {
+    setSaving(true);
+    setSaveError(null);
+    setSaveNote(null);
+
+    try {
+      const next = await apiFetch("/api/providers/config", {
+        method: "PUT",
+        body: JSON.stringify({
+          llm_provider: form.llm_provider,
+          chat_provider: form.chat_provider || null,
+          classify_provider: form.classify_provider || null,
+          score_provider: form.score_provider || null,
+          embed_provider: form.embed_provider || null,
+          ollama_enabled: form.ollama_enabled,
+          ollama_chat_model: form.ollama_chat_model,
+          ollama_embed_model: form.ollama_embed_model,
+        }),
+      }) as ProviderStatusResponse & { health?: Record<string, ProviderHealth> };
+
+      setStatus(next);
+      setRouting(next.routing ?? {});
+      setHealth(next.health ?? {});
+      setSaveNote(
+        next.config.llm_provider === "auto"
+          ? "Applied. Futuro will prefer Ollama whenever it is available."
+          : "Applied immediately."
+      );
+    } catch (e: any) {
+      setSaveError(e.message ?? "Failed to save provider settings");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto scrollbar-thin">
@@ -248,6 +400,151 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex-1 p-6 max-w-3xl space-y-8">
+
+        {/* ── Provider preference ─────────────────────────────────────────── */}
+        <section>
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700">Provider preference</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Choose what Futuro should use. Recommended: <span className="font-medium text-gray-600">Auto (prefer Ollama)</span>.
+              </p>
+            </div>
+            <button
+              onClick={saveConfig}
+              disabled={saving}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-futuro-500 hover:bg-futuro-600 disabled:opacity-50 text-white rounded-lg transition-colors flex-shrink-0"
+            >
+              {saving ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+              {saving ? "Applying…" : "Apply"}
+            </button>
+          </div>
+
+          {(saveNote || saveError) && (
+            <div className={clsx(
+              "mb-4 rounded-xl border px-4 py-3 text-xs",
+              saveError ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"
+            )}>
+              {saveError ?? saveNote}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+            {[
+              {
+                id: "prefer_ollama",
+                label: "Auto (Prefer Ollama)",
+                desc: "Use Ollama first, fall back when needed",
+              },
+              {
+                id: "ollama_only",
+                label: "Ollama Only",
+                desc: "Stay fully local when possible",
+              },
+              {
+                id: "claude_only",
+                label: "Claude Only",
+                desc: "Force cloud routing for all tasks",
+              },
+            ].map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => applyPreset(preset.id as "prefer_ollama" | "ollama_only" | "claude_only")}
+                className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-left hover:border-futuro-300 hover:bg-futuro-50 transition-colors"
+              >
+                <p className="text-sm font-medium text-gray-800">{preset.label}</p>
+                <p className="text-xs text-gray-500 mt-1">{preset.desc}</p>
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Global provider</span>
+              <select
+                value={form.llm_provider}
+                onChange={(e) => setForm((current) => ({ ...current, llm_provider: e.target.value as GlobalProviderValue }))}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-futuro-500"
+              >
+                <option value="auto">Auto (prefer Ollama)</option>
+                <option value="ollama">Ollama only</option>
+                <option value="claude">Claude only</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Ollama access</span>
+              <select
+                value={form.ollama_enabled ? "enabled" : "disabled"}
+                onChange={(e) => setForm((current) => ({ ...current, ollama_enabled: e.target.value === "enabled" }))}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-futuro-500"
+              >
+                <option value="enabled">Enabled</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Ollama chat model</span>
+              <select
+                value={form.ollama_chat_model}
+                onChange={(e) => setForm((current) => ({ ...current, ollama_chat_model: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-futuro-500"
+              >
+                {chatModelOptions.map((model) => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Ollama embed model</span>
+              <select
+                value={form.ollama_embed_model}
+                onChange={(e) => setForm((current) => ({ ...current, ollama_embed_model: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-futuro-500"
+              >
+                {embedModelOptions.map((model) => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Task</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Override</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ["chat", "Chat", "chat_provider"],
+                  ["classify", "Classify", "classify_provider"],
+                  ["score", "Score", "score_provider"],
+                  ["embed", "Embed", "embed_provider"],
+                ] as Array<[string, string, TaskProviderField]>).map(([task, label, field], i) => (
+                  <tr key={task} className={clsx("border-b border-gray-100 last:border-0", i % 2 === 0 ? "bg-white" : "bg-gray-50/50")}>
+                    <td className="px-4 py-2.5 font-medium text-gray-800">{label}</td>
+                    <td className="px-4 py-2.5">
+                      <select
+                        value={form[field]}
+                        onChange={(e) => setTaskProvider(field, e.target.value as ProviderOverrideValue)}
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-futuro-500"
+                      >
+                        <option value="">Follow global</option>
+                        <option value="ollama">Prefer Ollama</option>
+                        <option value="claude">Use Claude</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {/* ── Provider health ───────────────────────────────────────────────── */}
         <section>
