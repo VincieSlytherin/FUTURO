@@ -97,3 +97,17 @@ export interface Interview {
   happened_at: string | null;
   created_at: string;
 }
+
+export interface PortfolioFile {
+  filename: string;
+  relative_path: string;
+  size_bytes: number;
+  content_type: string | null;
+  uploaded_at: string;
+}
+
+export interface PortfolioFolder {
+  path: string;
+  file_count: number;
+  uploaded_at: string;
+}

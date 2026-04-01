@@ -1,6 +1,6 @@
 import Cookies from "js-cookie";
 import type {
-  Company, CampaignStats, StorySearchResult, MemoryFile, MemoryUpdate, Interview
+  Company, CampaignStats, StorySearchResult, MemoryFile, MemoryUpdate, Interview, PortfolioFile, PortfolioFolder
 } from "@/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
@@ -207,6 +207,64 @@ export const interviews = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+};
+
+// ── Portfolio ────────────────────────────────────────────────────────────────
+
+export const portfolio = {
+  list: () => req<{ files: PortfolioFile[]; folders: PortfolioFolder[] }>("/api/portfolio/files"),
+  delete: (entryPath: string) =>
+    req(`/api/portfolio/entry/${entryPath.split("/").map(encodeURIComponent).join("/")}`, { method: "DELETE" }),
+  async upload(files: File[], paths?: string[]): Promise<{ files: PortfolioFile[]; folders: PortfolioFolder[] }> {
+    const form = new FormData();
+    files.forEach((file, index) => {
+      form.append("files", file);
+      if (paths?.[index]) form.append("paths", paths[index]);
+    });
+
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/api/portfolio/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: form,
+      });
+    } catch {
+      throw new Error(`Could not reach Futuro backend at ${BASE}. Make sure the local API server is running.`);
+    }
+    if (res.status === 401) {
+      const err = await res.json().catch(() => ({ detail: "Session expired. Please sign in again." }));
+      return handleUnauthorized(err.detail);
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? "Upload failed");
+    }
+    return res.json();
+  },
+  async open(entryPath: string): Promise<void> {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/api/portfolio/download/${entryPath.split("/").map(encodeURIComponent).join("/")}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+    } catch {
+      throw new Error(`Could not reach Futuro backend at ${BASE}. Make sure the local API server is running.`);
+    }
+    if (res.status === 401) {
+      const err = await res.json().catch(() => ({ detail: "Session expired. Please sign in again." }));
+      return handleUnauthorized(err.detail);
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? "Could not open file");
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  },
 };
 
 // ── Intake ────────────────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ backend/data/futuro.db
 backend/data/memory/
 backend/data/chroma/
 backend/data/uploads/
+backend/data/portfolio/
 backups/
 
 # Node

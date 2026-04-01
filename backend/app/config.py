@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     data_dir: Path = BACKEND_ROOT / "data"
     memory_dir: Path = BACKEND_ROOT / "data/memory"
     chroma_dir: Path = BACKEND_ROOT / "data/chroma"
+    portfolio_dir: Path = BACKEND_ROOT / "data/portfolio"
     db_path: Path = BACKEND_ROOT / "data/futuro.db"
     custom_instructions_path: Path = BACKEND_ROOT / "data/custom_instructions.json"
 
@@ -66,6 +67,7 @@ class Settings(BaseSettings):
         self.data_dir = self._resolve_path(self.data_dir)
         self.memory_dir = self._resolve_path(self.memory_dir)
         self.chroma_dir = self._resolve_path(self.chroma_dir)
+        self.portfolio_dir = self._resolve_path(self.portfolio_dir)
         self.db_path = self._resolve_path(self.db_path)
         self.custom_instructions_path = self._resolve_path(self.custom_instructions_path)
 

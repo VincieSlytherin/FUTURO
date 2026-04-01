@@ -260,6 +260,76 @@ async def test_campaign_create_and_list(auth_client):
 
 
 @pytest.mark.asyncio
+async def test_portfolio_upload_list_and_delete(auth_client, tmp_path, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "portfolio_dir", tmp_path / "portfolio")
+
+    upload = await auth_client.post(
+        "/api/portfolio/upload",
+        files={"files": ("resume.pdf", b"%PDF-1.4 test content", "application/pdf")},
+    )
+    assert upload.status_code == 201
+    uploaded = upload.json()["files"]
+    assert len(uploaded) == 1
+    assert uploaded[0]["filename"] == "resume.pdf"
+
+    listed = await auth_client.get("/api/portfolio/files")
+    assert listed.status_code == 200
+    filenames = [item["filename"] for item in listed.json()["files"]]
+    assert "resume.pdf" in filenames
+    assert listed.json()["files"][0]["relative_path"] == "resume.pdf"
+
+    download = await auth_client.get("/api/portfolio/download/resume.pdf")
+    assert download.status_code == 200
+    assert download.content == b"%PDF-1.4 test content"
+
+    deleted = await auth_client.delete("/api/portfolio/entry/resume.pdf")
+    assert deleted.status_code == 204
+
+    listed_after = await auth_client.get("/api/portfolio/files")
+    assert listed_after.status_code == 200
+    assert listed_after.json()["files"] == []
+    assert listed_after.json()["folders"] == []
+
+
+@pytest.mark.asyncio
+async def test_portfolio_folder_upload_and_delete(auth_client, tmp_path, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "portfolio_dir", tmp_path / "portfolio")
+
+    upload = await auth_client.post(
+        "/api/portfolio/upload",
+        files=[
+            ("paths", (None, "applications/company-a/resume.docx")),
+            ("paths", (None, "applications/company-a/offer.pdf")),
+            ("files", ("resume.docx", b"docx-content", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")),
+            ("files", ("offer.pdf", b"%PDF-1.4 offer", "application/pdf")),
+        ],
+    )
+    assert upload.status_code == 201
+    payload = upload.json()
+    assert {item["relative_path"] for item in payload["files"]} == {
+        "applications/company-a/resume.docx",
+        "applications/company-a/offer.pdf",
+    }
+
+    listed = await auth_client.get("/api/portfolio/files")
+    assert listed.status_code == 200
+    assert any(item["relative_path"] == "applications/company-a/resume.docx" for item in listed.json()["files"])
+    assert any(folder["path"] == "applications" for folder in listed.json()["folders"])
+    assert any(folder["path"] == "applications/company-a" for folder in listed.json()["folders"])
+
+    deleted = await auth_client.delete("/api/portfolio/entry/applications/company-a")
+    assert deleted.status_code == 204
+
+    listed_after = await auth_client.get("/api/portfolio/files")
+    assert listed_after.status_code == 200
+    assert listed_after.json()["files"] == []
+
+
+@pytest.mark.asyncio
 async def test_campaign_create_extracts_jd_fields(auth_client):
     resp = await auth_client.post("/api/campaign/companies", json={
         "name": "OpenAI",

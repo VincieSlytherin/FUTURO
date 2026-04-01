@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
 from app.providers.router import init_providers
-from app.api import auth, chat, memory, campaign, stories, interviews, intake, scout, instructions, notifications
+from app.api import auth, chat, memory, campaign, stories, interviews, intake, scout, instructions, notifications, portfolio
 from app.api import providers as providers_api
 from app.workers.job_monitor import start_scheduler, stop_scheduler
 
@@ -16,6 +16,7 @@ async def lifespan(app: FastAPI):
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     settings.memory_dir.mkdir(parents=True, exist_ok=True)
     settings.chroma_dir.mkdir(parents=True, exist_ok=True)
+    settings.portfolio_dir.mkdir(parents=True, exist_ok=True)
     await init_db()
     await init_providers(settings)
     if settings.scout_enabled:
@@ -50,6 +51,7 @@ app.include_router(intake.router)
 app.include_router(scout.router)
 app.include_router(instructions.router)
 app.include_router(notifications.router)
+app.include_router(portfolio.router)
 app.include_router(providers_api.router)
 
 

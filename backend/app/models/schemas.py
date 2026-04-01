@@ -170,3 +170,24 @@ class InterviewResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ── Portfolio ────────────────────────────────────────────────────────────────
+
+class PortfolioFileResponse(BaseModel):
+    filename: str
+    relative_path: str
+    size_bytes: int
+    content_type: str | None
+    uploaded_at: datetime
+
+
+class PortfolioFolderResponse(BaseModel):
+    path: str
+    file_count: int
+    uploaded_at: datetime
+
+
+class PortfolioListResponse(BaseModel):
+    files: list[PortfolioFileResponse]
+    folders: list[PortfolioFolderResponse]
