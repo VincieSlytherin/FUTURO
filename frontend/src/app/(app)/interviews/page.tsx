@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Plus, X, Calendar, UserRound, Building2 } from "lucide-react";
 import { campaign as campaignApi, interviews as interviewsApi } from "@/lib/api";
@@ -14,6 +15,47 @@ function LogInterviewModal({
   onClose: () => void;
   onCreated: (interview: Interview) => void;
 }) {
+  if (companies.length === 0) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+        <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+            <h2 className="font-semibold text-gray-900">Log interview</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="space-y-4 px-6 py-5">
+            <p className="text-sm text-gray-600">
+              You do not have any companies in your campaign yet, so there is nothing to attach an interview to.
+            </p>
+            <p className="text-sm text-gray-500">
+              Add a company first, move it into Screening, Technical, or Onsite, then come back here to log the interview.
+            </p>
+
+            <div className="flex gap-3 pt-2">
+              <Link
+                href="/campaign"
+                onClick={onClose}
+                className="flex-1 rounded-lg bg-futuro-500 py-2.5 text-center text-sm font-medium text-white hover:bg-futuro-600"
+              >
+                Go to campaign
+              </Link>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const [companyId, setCompanyId] = useState<number>(companies[0]?.id ?? 0);
   const [roundName, setRoundName] = useState("");
   const [format, setFormat] = useState("");
@@ -244,7 +286,7 @@ export default function InterviewsPage() {
         )}
       </div>
 
-      {showAdd && companies.length > 0 && (
+      {showAdd && (
         <LogInterviewModal
           companies={companies}
           onClose={() => setShowAdd(false)}
