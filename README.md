@@ -32,6 +32,7 @@ This README is written as a practical setup guide. If you follow it top to botto
 - AI chat with intent routing for intake, stories, resume help, BQ practice, debrief, strategy, and scouting
 - Company pipeline tracking
 - Story bank with structured STAR details and local vector search
+- Portfolio vault for resumes, offer docs, and other job-search PDFs/Word files
 - Interview log and review flow
 - Local SQLite storage
 - Optional Claude or Ollama provider setup
@@ -279,6 +280,28 @@ Important notes:
 - they are applied on the next request immediately
 - you do not need to restart the backend after saving them
 
+## Portfolio document vault
+
+Futuro includes a `Portfolio` area for storing the files you collect during a search.
+
+Current behavior:
+
+- you can upload individual files or an entire folder
+- uploaded folders keep their relative folder structure
+- supported formats are `.pdf`, `.doc`, and `.docx`
+- you can open files directly from the UI
+- you can delete individual files or entire folders
+- portfolio files are stored locally under `backend/data/portfolio`
+
+Good examples of what to store there:
+
+- resume versions
+- cover letters
+- job descriptions you want to keep
+- take-home PDFs
+- interview prep packets
+- offer letters or recruiter docs
+
 ## Pull Ollama models from the UI
 
 You no longer need to rely only on terminal commands.
@@ -361,7 +384,8 @@ After both servers are running:
 4. Choose `Auto (prefer Ollama)`
 5. Pull an Ollama model if needed
 6. Click `Apply`
-7. Optional: add custom instructions for BQ, Story, Resume, or Scout
+7. Optional: upload your job-search documents in `/portfolio`
+8. Optional: add custom instructions for BQ, Story, Resume, or Scout
 
 If your selected Ollama model is not downloaded yet, Futuro may temporarily fall back to Claude when Claude is configured.
 
@@ -418,6 +442,7 @@ curl http://127.0.0.1:8000/api/health
 And in the app itself:
 
 - open `/settings`
+- open `/portfolio` and upload a test PDF or Word file
 - confirm the `Provider preference` section shows the mode you selected
 - confirm `Provider health` and `Task routing` reflect the actual active provider
 

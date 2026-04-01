@@ -12,6 +12,7 @@ If you follow it top to bottom, you should be able to:
 - sign in successfully
 - choose providers from the Settings UI
 - pull Ollama models with live progress
+- upload files or folders into the Portfolio vault
 
 ## Prerequisites
 
@@ -53,7 +54,7 @@ python --version
 Install backend dependencies from the project root:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 pip install -r backend/requirements.txt
 ```
 
@@ -68,7 +69,7 @@ pip install -r backend/requirements.txt
 If you prefer `venv`, that still works:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 python3.12 -m venv backend/.venv
 source backend/.venv/bin/activate
 python -m pip install --upgrade pip
@@ -78,7 +79,7 @@ pip install -r backend/requirements.txt
 ## Frontend requirements
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro/frontend
+cd futuro/frontend
 npm install
 cd ..
 ```
@@ -88,7 +89,7 @@ cd ..
 ### 1. Create `.env`
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 cp .env.example .env
 ```
 
@@ -109,7 +110,7 @@ JWT_SECRET=your-generated-secret
 Make sure your backend environment is active, then run:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 python -c "import bcrypt; print(bcrypt.hashpw(b'your-password-here', bcrypt.gensalt()).decode())"
 ```
 
@@ -140,7 +141,7 @@ GIT_AUTO_COMMIT=true
 
 DEBUG=true
 LOG_LEVEL=info
-ALLOWED_ORIGINS=["http://localhost:3000"]
+ALLOWED_ORIGINS=["http://127.0.0.1:3000","http://localhost:3000"]
 
 SCOUT_ENABLED=false
 SCOUT_DEFAULT_LOCATION=San Francisco, CA
@@ -216,6 +217,7 @@ From there you can:
 - set per-task overrides for `chat`, `classify`, `score`, and `embed`
 - choose the active Ollama chat and embedding models
 - pull Ollama models directly from the UI
+- edit per-function custom instructions without touching prompt files
 - apply the selection without manually editing `.env`
 
 When you click `Apply`, Futuro will:
@@ -223,6 +225,50 @@ When you click `Apply`, Futuro will:
 - save the provider settings into `.env`
 - rebuild provider routing immediately
 - prefer Ollama first when `Auto (prefer Ollama)` is selected
+
+## Custom instructions in the UI
+
+The Settings page also lets you change instructions per function.
+
+Current sections include:
+
+- Global
+- General Chat
+- BQ
+- Story
+- Resume
+- Debrief
+- Strategy
+- Scout
+- Intake
+
+Important notes:
+
+- custom instructions are stored locally in `backend/data/custom_instructions.json`
+- changes apply on the next request
+- you do not need to restart the backend after saving them
+
+## Portfolio document vault
+
+Futuro includes a `Portfolio` area for files you want to keep during the search.
+
+Current behavior:
+
+- upload individual files or a whole folder
+- keep the uploaded folder structure
+- support `.pdf`, `.doc`, and `.docx`
+- open files directly from the UI
+- delete a single file or a whole folder
+- store everything locally under `backend/data/portfolio`
+
+Useful examples:
+
+- resume versions
+- cover letters
+- saved job descriptions
+- take-home assignments
+- interview prep packets
+- offer letters or recruiter docs
 
 ## Pull Ollama models from the UI
 
@@ -247,7 +293,7 @@ Open two terminals.
 If you use Conda:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 conda activate futuro
 cd backend
 uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -256,7 +302,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 If you use `venv`:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 source backend/.venv/bin/activate
 cd backend
 uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -273,14 +319,14 @@ On first startup, the backend will:
 ### Terminal 2: frontend
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro/frontend
+cd futuro/frontend
 npx next dev -H 127.0.0.1 -p 3000
 ```
 
 ### Open the app
 
-- Frontend: `http://localhost:3000`
-- Login page: `http://localhost:3000/login`
+- Frontend: `http://127.0.0.1:3000`
+- Login page: `http://127.0.0.1:3000/login`
 - Backend health: `http://127.0.0.1:8000/api/health`
 - Backend docs: `http://127.0.0.1:8000/docs`
 
@@ -311,7 +357,7 @@ Expected result: JSON containing `access_token`.
 Open:
 
 ```text
-http://localhost:3000/settings
+http://127.0.0.1:3000/settings
 ```
 
 Verify that:
@@ -319,13 +365,14 @@ Verify that:
 - the provider preference shows the mode you selected
 - Ollama health is visible in the provider status area
 - if `Auto (prefer Ollama)` is selected but the Ollama chat model is not pulled yet, Futuro temporarily falls back to Claude
+- the `Portfolio` page can upload a test PDF or Word file
 
 ## Shortcut commands
 
 After dependencies are installed, you can use:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 make setup
 make dev
 make dev-backend
@@ -341,7 +388,7 @@ The manual steps above are still the clearest path if you want full control over
 If you use Conda:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 conda activate futuro
 cd backend
 pytest tests -v
@@ -350,7 +397,7 @@ pytest tests -v
 If you use `venv`:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 source backend/.venv/bin/activate
 cd backend
 pytest tests -v
@@ -359,7 +406,7 @@ pytest tests -v
 ### Frontend
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro/frontend
+cd futuro/frontend
 npx tsc --noEmit
 ```
 
@@ -382,9 +429,19 @@ If you already had a local database from the old pre-Alembic snapshot, use `make
 
 The plaintext password you type into the login form must match the bcrypt hash stored in `USER_PASSWORD_HASH`.
 
-### `http://localhost:8000/docs` is missing
+### `http://127.0.0.1:8000/docs` is missing
 
 Set `DEBUG=true` in `.env` and restart the backend.
+
+### Portfolio upload fails
+
+Check these first:
+
+- you refreshed the app after restarting the backend
+- the file type is `.pdf`, `.doc`, or `.docx`
+- if you upload a folder, your browser supports folder selection well
+
+Uploaded portfolio files are stored locally in `backend/data/portfolio`.
 
 ### Ollama requests fail
 
