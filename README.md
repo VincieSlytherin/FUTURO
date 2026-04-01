@@ -78,14 +78,14 @@ conda activate futuro
 From the project root:
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 pip install -r backend/requirements.txt
 ```
 
 ### 3. Install frontend dependencies
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro/frontend
+cd frontend
 npm install
 cd ..
 ```
@@ -93,7 +93,7 @@ cd ..
 ### 4. Create your environment file
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 cp .env.example .env
 ```
 
@@ -309,7 +309,7 @@ Open two terminals.
 ### Terminal 1: backend
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro
+cd futuro
 conda activate futuro
 cd backend
 uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -323,7 +323,7 @@ Expected result:
 ### Terminal 2: frontend
 
 ```bash
-cd /Users/ranju1008/Desktop/futuro/frontend
+cd futuro/frontend
 npx next dev -H 127.0.0.1 -p 3000
 ```
 
