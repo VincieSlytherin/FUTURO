@@ -22,6 +22,19 @@ _active_config_runs: set[int] = set()
 def is_config_running(config_id: int) -> bool:
     return config_id in _active_config_runs
 
+
+async def _update_run_progress(run_id: int, **fields) -> None:
+    from app.database import AsyncSessionLocal
+    from app.models.db import ScoutRun
+
+    async with AsyncSessionLocal() as db:
+        run = await db.get(ScoutRun, run_id)
+        if not run:
+            return
+        for field, value in fields.items():
+            setattr(run, field, value)
+        await db.commit()
+
 # ── Scraping ──────────────────────────────────────────────────────────────────
 
 def _scrape_jobs(
@@ -247,19 +260,26 @@ async def run_scout(
             await db.commit()
             await db.refresh(run)
             run_id = run.id
+        await _update_run_progress(run_id, error_msg="Scraping job boards...")
 
         raw_jobs = _scrape_jobs(search_term, location, sites, results_wanted, hours_old, distance, is_remote)
         logger.info(f"[scout:{config_id}] scraped {len(raw_jobs)} listings")
+        await _update_run_progress(
+            run_id,
+            jobs_found=len(raw_jobs),
+            error_msg=f"Deduplicating results... {len(raw_jobs)} listings fetched",
+        )
 
         if not raw_jobs:
-            async with AsyncSessionLocal() as db:
-                run = await db.get(ScoutRun, run_id)
-                run.status = "DONE"
-                run.finished_at = datetime.now(timezone.utc)
-                run.jobs_found = 0
-                run.jobs_new = 0
-                run.jobs_scored = 0
-                await db.commit()
+            await _update_run_progress(
+                run_id,
+                status="DONE",
+                finished_at=datetime.now(timezone.utc),
+                jobs_found=0,
+                jobs_new=0,
+                jobs_scored=0,
+                error_msg="Completed — no jobs found",
+            )
             return {"jobs_found": 0, "jobs_new": 0, "jobs_scored": 0}
 
         # 2. Deduplicate
@@ -272,16 +292,22 @@ async def run_scout(
 
         new_jobs = [j for j in raw_jobs if j["url_hash"] not in existing_hashes]
         logger.info(f"[scout:{config_id}] {len(new_jobs)} new (deduplicated {len(raw_jobs) - len(new_jobs)})")
+        await _update_run_progress(
+            run_id,
+            jobs_new=len(new_jobs),
+            error_msg=f"Scoring jobs... 0/{len(new_jobs)} new listings",
+        )
 
         if not new_jobs:
-            async with AsyncSessionLocal() as db:
-                run = await db.get(ScoutRun, run_id)
-                run.status = "DONE"
-                run.finished_at = datetime.now(timezone.utc)
-                run.jobs_found = len(raw_jobs)
-                run.jobs_new = 0
-                run.jobs_scored = 0
-                await db.commit()
+            await _update_run_progress(
+                run_id,
+                status="DONE",
+                finished_at=datetime.now(timezone.utc),
+                jobs_found=len(raw_jobs),
+                jobs_new=0,
+                jobs_scored=0,
+                error_msg="Completed — no new jobs after deduplication",
+            )
             return {"jobs_found": len(raw_jobs), "jobs_new": 0, "jobs_scored": 0}
 
         # 3. Score each new job with Claude
@@ -289,7 +315,8 @@ async def run_scout(
         scored = 0
         listings_to_insert: list[JobListing] = []
 
-        for job in new_jobs:
+        total_to_score = len(new_jobs)
+        for idx, job in enumerate(new_jobs, start=1):
             scoring = await score_job(job, identity)
             listing = JobListing(
                 url_hash=job["url_hash"],
@@ -318,8 +345,14 @@ async def run_scout(
             listings_to_insert.append(listing)
             if scoring["score"] is not None:
                 scored += 1
+            await _update_run_progress(
+                run_id,
+                jobs_scored=scored,
+                error_msg=f"Scoring jobs... {idx}/{total_to_score}",
+            )
 
         # 4. Persist
+        await _update_run_progress(run_id, error_msg="Saving scored jobs...")
         async with AsyncSessionLocal() as db:
             for listing in listings_to_insert:
                 db.add(listing)
@@ -338,6 +371,10 @@ async def run_scout(
             await db.commit()
 
         high_score = [j for j in listings_to_insert if (j.score or 0) >= min_score]
+        await _update_run_progress(
+            run_id,
+            error_msg=f"Completed — {len(new_jobs)} new, {scored} scored, {len(high_score)} above threshold",
+        )
         logger.info(f"[scout:{config_id}] done — {len(new_jobs)} new, {len(high_score)} above threshold")
         return {
             "jobs_found": len(raw_jobs),

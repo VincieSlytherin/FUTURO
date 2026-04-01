@@ -53,6 +53,18 @@ export interface ScoutStats {
   active_configs: number;
 }
 
+export interface ScoutRun {
+  id: number;
+  config_id: number;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  jobs_found: number;
+  jobs_new: number;
+  jobs_scored: number;
+  error_msg: string | null;
+}
+
 export const scout = {
   // Configs
   listConfigs: () => req<ScoutConfig[]>("/api/scout/configs"),
@@ -65,7 +77,7 @@ export const scout = {
   runConfig: (id: number) =>
     req<{ queued: boolean; message: string }>(`/api/scout/configs/${id}/run`, { method: "POST" }),
   listRuns: (id: number) =>
-    req<Array<{ id: number; status: string; started_at: string; jobs_found: number; jobs_new: number; jobs_scored: number; error_msg: string | null }>>(`/api/scout/configs/${id}/runs`),
+    req<ScoutRun[]>(`/api/scout/configs/${id}/runs`),
 
   // Jobs
   listJobs: (params: { status?: string; min_score?: number; limit?: number; offset?: number }) => {

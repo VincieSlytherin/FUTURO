@@ -7,7 +7,7 @@ import {
   X, CheckCircle, Eye, EyeOff, Zap, Clock, RefreshCw,
 } from "lucide-react";
 import { scout } from "@/lib/scout-api";
-import type { ScoutConfig, JobListing, ScoutStats } from "@/lib/scout-api";
+import type { ScoutConfig, JobListing, ScoutRun, ScoutStats } from "@/lib/scout-api";
 import clsx from "clsx";
 
 // ── Score badge ───────────────────────────────────────────────────────────────
@@ -239,20 +239,19 @@ function JobCard({
 // ── Config card ───────────────────────────────────────────────────────────────
 
 function ConfigCard({
-  config, onRun, onToggle, onDelete,
+  config, latestRun, onRun, onToggle, onDelete,
 }: {
   config: ScoutConfig;
+  latestRun: ScoutRun | null;
   onRun: (id: number) => void;
   onToggle: (id: number, active: boolean) => void;
   onDelete: (id: number) => void;
 }) {
-  const [running, setRunning] = useState(false);
+  const isRunning = latestRun?.status === "RUNNING";
+  const progress = getRunProgress(latestRun);
 
   async function handleRun() {
-    setRunning(true);
-    try { await onRun(config.id); } finally {
-      setTimeout(() => setRunning(false), 3000);
-    }
+    await onRun(config.id);
   }
 
   return (
@@ -274,11 +273,11 @@ function ConfigCard({
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={handleRun}
-            disabled={running}
+            disabled={isRunning}
             title="Run now"
             className="p-1.5 text-gray-400 hover:text-futuro-600 hover:bg-white rounded-lg transition-colors"
           >
-            <Play size={13} className={running ? "animate-pulse text-futuro-500" : ""} />
+            <Play size={13} className={isRunning ? "animate-pulse text-futuro-500" : ""} />
           </button>
           <button
             onClick={() => onToggle(config.id, !config.is_active)}
@@ -300,8 +299,78 @@ function ConfigCard({
           <Clock size={10}/> Last run: {new Date(config.last_run_at).toLocaleString()}
         </p>
       )}
+      {latestRun && (
+        <div className="mt-2 pl-3.5 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-[11px]">
+            <span className={clsx(
+              "font-medium",
+              latestRun.status === "RUNNING" && "text-futuro-700",
+              latestRun.status === "DONE" && "text-green-700",
+              latestRun.status === "ERROR" && "text-red-600",
+            )}>
+              {getRunStatusLabel(latestRun)}
+            </span>
+            <span className="text-gray-400">
+              {progress === null ? "" : `${progress}%`}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-gray-200">
+            <div
+              className={clsx(
+                "h-full rounded-full transition-all duration-500",
+                latestRun.status === "ERROR" ? "bg-red-400" : "bg-futuro-500",
+                latestRun.status === "RUNNING" && "animate-pulse"
+              )}
+              style={{ width: `${progress ?? 100}%` }}
+            />
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-500">
+            {getRunDetail(latestRun)}
+          </p>
+        </div>
+      )}
     </div>
   );
+}
+
+function getRunProgress(run: ScoutRun | null): number | null {
+  if (!run) return null;
+  if (run.status === "DONE") return 100;
+  if (run.status === "ERROR") return 100;
+  const message = (run.error_msg ?? "").toLowerCase();
+  if (message.startsWith("scraping")) return 20;
+  if (message.startsWith("deduplicating")) return 45;
+  if (message.startsWith("saving")) return 90;
+  if (message.startsWith("completed")) return 100;
+  const scoring = message.match(/scoring jobs\.\.\.\s*(\d+)\/(\d+)/);
+  if (scoring) {
+    const current = Number(scoring[1]);
+    const total = Number(scoring[2]);
+    if (total > 0) {
+      return Math.min(90, Math.round(55 + (current / total) * 30));
+    }
+  }
+  return 10;
+}
+
+function getRunStatusLabel(run: ScoutRun): string {
+  if (run.status === "RUNNING") return "Running";
+  if (run.status === "DONE") return "Completed";
+  if (run.status === "ERROR") return "Failed";
+  return run.status;
+}
+
+function getRunDetail(run: ScoutRun): string {
+  if (run.status === "ERROR") {
+    return run.error_msg || "Scan failed.";
+  }
+  if (run.status === "RUNNING") {
+    return run.error_msg || "Scanning job boards...";
+  }
+  if (run.error_msg?.startsWith("Completed")) {
+    return run.error_msg;
+  }
+  return `${run.jobs_found} found · ${run.jobs_new} new · ${run.jobs_scored} scored`;
 }
 
 // ── Add config modal ──────────────────────────────────────────────────────────
@@ -419,6 +488,7 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
 export default function JobsPage() {
   const [jobs,      setJobs]       = useState<JobListing[]>([]);
   const [configs,   setConfigs]    = useState<ScoutConfig[]>([]);
+  const [latestRuns, setLatestRuns] = useState<Record<number, ScoutRun | null>>({});
   const [stats,     setStats]      = useState<ScoutStats | null>(null);
   const [loading,   setLoading]    = useState(true);
   const [statusFilter, setStatus]  = useState<StatusFilter>("NEW");
@@ -438,17 +508,60 @@ export default function JobsPage() {
     setLoading(false);
   }, []);
 
+  const loadRunStates = useCallback(async (configList?: ScoutConfig[]) => {
+    const targetConfigs = configList ?? configs;
+    if (targetConfigs.length === 0) {
+      setLatestRuns({});
+      return {} as Record<number, ScoutRun | null>;
+    }
+    const results = await Promise.all(
+      targetConfigs.map(async (config) => {
+        const runs = await scout.listRuns(config.id);
+        return [config.id, runs[0] ?? null] as const;
+      })
+    );
+    const mapped = Object.fromEntries(results) as Record<number, ScoutRun | null>;
+    setLatestRuns(mapped);
+    return mapped;
+  }, [configs]);
+
+  const refreshScoutMeta = useCallback(async () => {
+    const [cs, st] = await Promise.all([scout.listConfigs(), scout.stats()]);
+    setConfigs(cs);
+    setStats(st);
+    await loadRunStates(cs);
+  }, [loadRunStates]);
+
   useEffect(() => {
     setPage(0);
     loadJobs(statusFilter, minScore, 0);
   }, [statusFilter, minScore, loadJobs]);
 
   useEffect(() => {
-    Promise.all([scout.listConfigs(), scout.stats()]).then(([cs, st]) => {
-      setConfigs(cs);
-      setStats(st);
-    });
-  }, []);
+    refreshScoutMeta();
+  }, [refreshScoutMeta]);
+
+  useEffect(() => {
+    const hasRunning = Object.values(latestRuns).some((run) => run?.status === "RUNNING");
+    if (!hasRunning) return;
+
+    const timer = setInterval(async () => {
+      const previous = latestRuns;
+      const nextRuns = await loadRunStates();
+      const finishedAConfig = Object.entries(nextRuns).some(([configId, run]) => {
+        const prev = previous[Number(configId)];
+        return prev?.status === "RUNNING" && run?.status && run.status !== "RUNNING";
+      });
+      if (finishedAConfig) {
+        await Promise.all([
+          loadJobs(statusFilter, minScore, page),
+          refreshScoutMeta(),
+        ]);
+      }
+    }, 2500);
+
+    return () => clearInterval(timer);
+  }, [latestRuns, loadRunStates, loadJobs, refreshScoutMeta, statusFilter, minScore, page]);
 
   async function handleAction(id: number, status: string) {
     await scout.actionJob(id, status);
@@ -465,14 +578,25 @@ export default function JobsPage() {
     try {
       const result = await scout.runConfig(configId);
       if (result.queued) {
-        setRunNotice("Scan started. New jobs should appear shortly.");
-        setTimeout(() => loadJobs(statusFilter, minScore, page), 8000);
+        setLatestRuns((current) => ({
+          ...current,
+          [configId]: {
+            id: current[configId]?.id ?? -Date.now(),
+            config_id: configId,
+            status: "RUNNING",
+            started_at: new Date().toISOString(),
+            finished_at: null,
+            jobs_found: 0,
+            jobs_new: 0,
+            jobs_scored: 0,
+            error_msg: "Starting scan...",
+          },
+        }));
+        setRunNotice("Scan started. Watch the scout card for progress.");
         setTimeout(() => {
-          Promise.all([scout.listConfigs(), scout.stats()]).then(([cs, st]) => {
-            setConfigs(cs);
-            setStats(st);
-          });
-        }, 2000);
+          loadRunStates();
+          refreshScoutMeta();
+        }, 1000);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not start scout run";
@@ -652,6 +776,7 @@ export default function JobsPage() {
             ) : (
               configs.map(c => (
                 <ConfigCard key={c.id} config={c}
+                  latestRun={latestRuns[c.id] ?? null}
                   onRun={handleRun}
                   onToggle={handleToggle}
                   onDelete={handleDeleteConfig}

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Cpu, Cloud, Download, RefreshCw, CheckCircle, AlertCircle, X } from "lucide-react";
 import clsx from "clsx";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 function getCookie(name: string): string {
   if (typeof document === "undefined") return "";

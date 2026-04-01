@@ -14,17 +14,25 @@ You are helping the person document a real professional experience as a STAR sto
 - "How long did this take? What was the timeline?"
 
 **Turn 3 — Draft the STAR**
-Write:
-1. Full STAR (Situation / Task / Action / Result) — aim for 2-3 minutes when spoken
-2. 30-second version — for quick delivery or warm-up
-3. 2-3 realistic follow-up questions with strong answers
+Write the story in a saveable markdown format using these exact labels:
+- `## <story title>`
+- `**Themes:** ...`
+- `**The one-liner:** ...`
+- `**Situation:** ...`
+- `**Task:** ...`
+- `**Action:** ...`
+- `**Result:** ...`
+
+Then add:
+1. 30-second version — for quick delivery or warm-up
+2. 2-3 realistic follow-up questions with strong answers
 
 **Turn 4 — Theme mapping**
 Tell them which behavioral question themes this story covers from the standard set:
 Impact / Ambiguity / Technical problem-solving / Innovation / Leadership / Collaboration / Conflict / Failure / Prioritization / Constraints / Fast learning
 
 **Turn 5 — Save**
-"Want me to add this to your story bank? I'll assign it the next story ID."
+"Want me to add this full version to your story bank? I'll keep the specific situation, task, action, and result details."
 
 ## Quality bar
 

@@ -296,3 +296,95 @@ AI Systems Engineer specializing in production-scale LLM applications, RAG pipel
     identity_update = next(u for u in updates if u.file == "L0_identity.md" and u.section == "Technical skills")
     assert "LangGraph" in identity_update.content
     assert "FastAPI" in identity_update.content
+
+
+@pytest.mark.asyncio
+async def test_bq_post_process_builds_story_bank_updates():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+    from app.memory.manager import MemoryManager
+    from app.agents.base import BQCoachAgent
+
+    response = """
+I've saved your full BQ story bank to memory. You now have:
+
+Core stories locked in:
+Tell me about yourself — Applied GenAI at RGA, RAG platform + copilot rebuild
+Why should we hire you — Production AI depth + regulated environment experience
+Greatest achievement — RAG platform (the anchor story)
+
+Still missing (we need to build these):
+Failure story — something you owned that didn't go as planned
+Leadership/mentorship story — helping someone grow or driving alignment
+
+When you're ready, let's knock out the failure story first.
+"""
+
+    with TemporaryDirectory() as tmp:
+        memory = MemoryManager(Path(tmp), git_auto_commit=False)
+        agent = BQCoachAgent(memory)
+        ctx = memory.load_context("BQ")
+        updates = await agent.post_process(response, "Here is my BQ story bank.", ctx)
+
+        for update in updates:
+            memory.apply_update(
+                filename=update.file,
+                section=update.section,
+                action=update.action,
+                content=update.content,
+                reason=update.reason,
+            )
+
+        stories = memory.read("stories_bank.md")
+
+    assert any(u.file == "stories_bank.md" and u.section == "Quick-reference index" for u in updates)
+    assert any(u.file == "stories_bank.md" and u.section == "Coverage gaps" for u in updates)
+    assert any(u.file == "stories_bank.md" and u.action == "append" for u in updates)
+    assert "## STORY-001 · Tell me about yourself" in stories
+    assert "Applied GenAI at RGA, RAG platform + copilot rebuild" in stories
+    assert "## Coverage gaps" in stories
+    assert "Failure story" in stories
+
+
+@pytest.mark.asyncio
+async def test_story_post_process_saves_full_star_details():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+    from app.memory.manager import MemoryManager
+    from app.agents.base import StoryBuilderAgent
+
+    response = """
+## Copilot rebuild under pressure
+
+**Themes:** ambiguity, technical problem-solving, conflict
+**The one-liner:** Rebuilt a failing analytics copilot from brittle SQL generation to reliable function-calling orchestration.
+**Situation:** Our Databricks analytics copilot was failing frequently in production and users were losing trust in it.
+**Task:** I needed to redesign the system quickly without breaking stakeholder workflows, while preserving analyst flexibility.
+**Action:** I audited failure patterns, replaced free-form SQL generation with tool-based function calling, added retry logic, and built an observability panel so we could inspect agent traces with non-technical partners.
+**Result:** Execution failure rate dropped from 31% to 5%, ad-hoc SQL workload fell by 4x, and stakeholders regained confidence in the tool.
+
+30-second version: ...
+"""
+
+    with TemporaryDirectory() as tmp:
+        memory = MemoryManager(Path(tmp), git_auto_commit=False)
+        agent = StoryBuilderAgent(memory)
+        ctx = memory.load_context("STORY")
+        updates = await agent.post_process(response, "Help me capture my copilot rebuild story.", ctx)
+
+        for update in updates:
+            memory.apply_update(
+                filename=update.file,
+                section=update.section,
+                action=update.action,
+                content=update.content,
+                reason=update.reason,
+            )
+
+        stories = memory.read("stories_bank.md")
+
+    assert "## STORY-001 · Copilot rebuild under pressure" in stories
+    assert "**Situation:** Our Databricks analytics copilot was failing frequently in production" in stories
+    assert "**Task:** I needed to redesign the system quickly" in stories
+    assert "**Action:** I audited failure patterns" in stories
+    assert "**Result:** Execution failure rate dropped from 31% to 5%" in stories

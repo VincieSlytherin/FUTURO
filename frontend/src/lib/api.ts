@@ -3,7 +3,7 @@ import type {
   Company, CampaignStats, StorySearchResult, MemoryFile, MemoryUpdate, Interview
 } from "@/types";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 function getToken(): string {
   return Cookies.get("futuro_token") ?? "";
@@ -27,10 +27,15 @@ function headers(extra: Record<string, string> = {}): Record<string, string> {
 }
 
 export async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { ...headers(), ...(init?.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: { ...headers(), ...(init?.headers ?? {}) },
+    });
+  } catch {
+    throw new Error(`Could not reach Futuro backend at ${BASE}. Make sure the local API server is running.`);
+  }
   if (res.status === 401) {
     const err = await res.json().catch(() => ({ detail: "Session expired. Please sign in again." }));
     return handleUnauthorized(err.detail);
@@ -49,11 +54,16 @@ export async function req<T>(path: string, init?: RequestInit): Promise<T> {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export async function login(password: string): Promise<{ access_token: string }> {
-  const res = await fetch(`${BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+  } catch {
+    throw new Error(`Could not reach Futuro backend at ${BASE}. Make sure the local API server is running.`);
+  }
   if (!res.ok) throw new Error("Invalid password");
   const data = await res.json();
   Cookies.set("futuro_token", data.access_token, { expires: 7, sameSite: "strict" });
@@ -84,11 +94,17 @@ export async function streamChat(
   history: ChatMessage[],
   callbacks: ChatCallbacks,
 ): Promise<void> {
-  const res = await fetch(`${BASE}/api/chat`, {
-    method: "POST",
-    headers: headers({ Accept: "text/event-stream" }),
-    body: JSON.stringify({ message, history }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/chat`, {
+      method: "POST",
+      headers: headers({ Accept: "text/event-stream" }),
+      body: JSON.stringify({ message, history }),
+    });
+  } catch {
+    callbacks.onError?.(new Error(`Could not reach Futuro backend at ${BASE}. Make sure the local API server is running.`));
+    return;
+  }
 
   if (res.status === 401) {
     const err = await res.json().catch(() => ({ detail: "Session expired. Please sign in again." }));
@@ -196,11 +212,17 @@ export const interviews = {
 // ── Intake ────────────────────────────────────────────────────────────────────
 
 export async function intakeUrl(url: string, callbacks: ChatCallbacks): Promise<void> {
-  const res = await fetch(`${BASE}/api/intake/url`, {
-    method: "POST",
-    headers: headers({ Accept: "text/event-stream" }),
-    body: JSON.stringify({ url }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/intake/url`, {
+      method: "POST",
+      headers: headers({ Accept: "text/event-stream" }),
+      body: JSON.stringify({ url }),
+    });
+  } catch {
+    callbacks.onError?.(new Error(`Could not reach Futuro backend at ${BASE}. Make sure the local API server is running.`));
+    return;
+  }
   if (res.status === 401) {
     const err = await res.json().catch(() => ({ detail: "Session expired. Please sign in again." }));
     callbacks.onError?.(new Error(err.detail ?? "Session expired. Please sign in again."));

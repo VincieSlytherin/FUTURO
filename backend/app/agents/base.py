@@ -49,6 +49,7 @@ MEMORY_TARGETS: dict[str, list[str]] = {
     ],
     "stories_bank.md": [
         "Quick-reference index",
+        "Coverage gaps",
     ],
     "resume_versions.md": [
         "Current version: v1.0",
@@ -142,7 +143,9 @@ class BaseAgent:
             resume_updates = self._extract_resume_memory_updates(message)
             if resume_updates:
                 return resume_updates
-        return await self._extract_memory_updates(response, message, ctx)
+        story_updates = self._extract_story_bank_updates(message, response, ctx)
+        memory_updates = await self._extract_memory_updates(response, message, ctx)
+        return self._merge_updates(story_updates + memory_updates)
 
     async def _extract_memory_updates(
         self,
@@ -228,6 +231,8 @@ class BaseAgent:
         allowed_sections = MEMORY_TARGETS.get(update.file)
         if allowed_sections is None:
             return False
+        if update.file == "stories_bank.md" and update.section.startswith("STORY-"):
+            return bool(update.content.strip())
         if update.section and update.section not in allowed_sections:
             return False
         if not update.content.strip():
@@ -481,6 +486,338 @@ class BaseAgent:
         cleaned = re.sub(r"\s+", " ", cleaned)
         return cleaned.strip(" -;,.")
 
+    def _extract_story_bank_updates(
+        self,
+        message: str,
+        response: str,
+        ctx: AgentContext,
+    ) -> list[MemoryUpdate]:
+        structured_stories = self._parse_structured_story_blocks(response) or self._parse_structured_story_blocks(message)
+        core_stories = self._parse_story_inventory(response) or self._parse_story_inventory(message)
+        coverage_gaps = self._parse_coverage_gaps(response) or self._parse_coverage_gaps(message)
+
+        if not structured_stories and not core_stories and not coverage_gaps:
+            return []
+
+        existing_entries = self._parse_existing_story_entries(ctx.stories)
+        existing_titles = {entry["title"].lower() for entry in existing_entries}
+        next_story_number = self._next_story_number(existing_entries)
+
+        new_entries: list[dict[str, str]] = []
+        replacement_updates: list[MemoryUpdate] = []
+
+        for story in structured_stories:
+            title = story["title"].strip()
+            if not title:
+                continue
+
+            existing = next((entry for entry in existing_entries if entry["title"].lower() == title.lower()), None)
+            story_id = existing["story_id"] if existing else f"STORY-{next_story_number:03d}"
+            if not existing:
+                next_story_number += 1
+
+            entry = {
+                "story_id": story_id,
+                "title": title,
+                "one_liner": story["one_liner"].strip(),
+            }
+
+            if existing:
+                existing["one_liner"] = entry["one_liner"] or existing.get("one_liner", "")
+                replacement_updates.append(
+                    MemoryUpdate(
+                        file="stories_bank.md",
+                        section=f'{story_id} · {title}',
+                        action="replace",
+                        content=self._build_story_block_body(story),
+                        reason="Updated detailed story bank entry from chat",
+                    )
+                )
+            else:
+                new_entries.append(entry)
+                replacement_updates.append(
+                    MemoryUpdate(
+                        file="stories_bank.md",
+                        section="",
+                        action="append",
+                        content=self._build_story_block(story_id, story),
+                        reason="Added detailed story bank entry from chat",
+                    )
+                )
+                existing_titles.add(title.lower())
+
+        for story in core_stories:
+            title = story["title"].strip()
+            if not title or title.lower() in existing_titles:
+                continue
+            story_id = f"STORY-{next_story_number:03d}"
+            next_story_number += 1
+            new_entries.append({
+                "story_id": story_id,
+                "title": title,
+                "one_liner": story["one_liner"].strip(),
+            })
+            existing_titles.add(title.lower())
+
+        if not replacement_updates and not new_entries and not coverage_gaps:
+            return []
+
+        combined_entries = existing_entries + new_entries
+        for story in structured_stories:
+            title = story["title"].strip()
+            if not title:
+                continue
+            for entry in combined_entries:
+                if entry["title"].lower() == title.lower():
+                    entry["one_liner"] = story["one_liner"].strip() or entry.get("one_liner", "")
+                    break
+        updates: list[MemoryUpdate] = []
+
+        if combined_entries:
+            index_lines = ["| Theme | Stories |", "|---|---|"]
+            for entry in combined_entries:
+                story_ref = f'{entry["story_id"]} · {entry["one_liner"]}' if entry["one_liner"] else entry["story_id"]
+                index_lines.append(f'| {entry["title"]} | {story_ref} |')
+            updates.append(
+                MemoryUpdate(
+                    file="stories_bank.md",
+                    section="Quick-reference index",
+                    action="replace",
+                    content="\n".join(index_lines),
+                    reason="Saved story bank index from chat",
+                )
+            )
+
+        if coverage_gaps:
+            updates.append(
+                MemoryUpdate(
+                    file="stories_bank.md",
+                    section="Coverage gaps",
+                    action="replace",
+                    content="\n".join(f"- {gap}" for gap in coverage_gaps),
+                    reason="Saved missing behavioral story coverage from chat",
+                )
+            )
+
+        if new_entries:
+            story_blocks = []
+            for entry in new_entries:
+                story_blocks.append(
+                    self._build_story_block(
+                        entry["story_id"],
+                        {
+                            "title": entry["title"],
+                            "themes": [entry["title"]],
+                            "one_liner": entry["one_liner"] or "Imported from BQ session",
+                            "situation": "Imported from a BQ/story-bank conversation. Flesh this out in Story Builder mode.",
+                            "task": "Clarify the challenge, stakes, and your ownership.",
+                            "action": "Add the specific actions you personally drove.",
+                            "result": "Add the outcome, ideally with a concrete metric.",
+                            "raw_notes": "",
+                        },
+                    )
+                )
+            replacement_updates.append(
+                MemoryUpdate(
+                    file="stories_bank.md",
+                    section="",
+                    action="append",
+                    content="\n\n".join(story_blocks),
+                    reason="Added structured story entries from BQ chat",
+                )
+            )
+
+        return updates + replacement_updates
+
+    def _parse_story_inventory(self, text: str) -> list[dict[str, str]]:
+        section_match = re.search(
+            r"Core stories locked in:\s*(.+?)(?:\n\s*Still missing|\n\s*When you're ready|\Z)",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        block = section_match.group(1) if section_match else text
+
+        stories: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for raw_line in block.splitlines():
+            line = self._clean_story_line(raw_line)
+            if not line:
+                continue
+            if ":" in line and not re.search(r"\s[—–-]\s", line):
+                continue
+            if len(line) > 160:
+                continue
+            title, one_liner = self._split_story_line(line)
+            if not title or title.lower() in seen:
+                continue
+            if len(title.split()) > 10 and not one_liner:
+                continue
+            seen.add(title.lower())
+            stories.append({"title": title, "one_liner": one_liner})
+        return stories
+
+    def _parse_coverage_gaps(self, text: str) -> list[str]:
+        match = re.search(
+            r"Still missing(?:\s*\(.*?\))?:\s*(.+?)(?:\n\s*When you're ready|\Z)",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not match:
+            return []
+
+        gaps: list[str] = []
+        for raw_line in match.group(1).splitlines():
+            line = self._clean_story_line(raw_line)
+            if not line or line.lower() == "none yet.":
+                continue
+            gaps.append(line)
+        return gaps
+
+    def _clean_story_line(self, line: str) -> str:
+        cleaned = line.strip()
+        cleaned = re.sub(r"^[\-\*\u2022]+\s*", "", cleaned)
+        cleaned = re.sub(r"^\d+\.\s*", "", cleaned)
+        cleaned = cleaned.strip()
+        if not cleaned:
+            return ""
+        lower = cleaned.lower()
+        if lower.startswith(("core stories locked in", "still missing", "you now have", "when you're ready")):
+            return ""
+        return cleaned
+
+    def _split_story_line(self, line: str) -> tuple[str, str]:
+        for separator in (" — ", " – ", " - "):
+            if separator in line:
+                title, one_liner = line.split(separator, 1)
+                return title.strip(" -"), one_liner.strip()
+        return line.strip(" -"), ""
+
+    def _parse_structured_story_blocks(self, text: str) -> list[dict[str, str | list[str]]]:
+        if "**Situation:**" not in text or "**Action:**" not in text or "**Result:**" not in text:
+            return []
+
+        chunks = re.split(r"(?=^## )", text, flags=re.MULTILINE)
+        if len(chunks) == 1:
+            chunks = [text]
+
+        stories: list[dict[str, str | list[str]]] = []
+        for chunk in chunks:
+            if "**Situation:**" not in chunk or "**Action:**" not in chunk or "**Result:**" not in chunk:
+                continue
+            title = self._extract_story_title(chunk)
+            if not title:
+                continue
+            one_liner = self._extract_story_label(chunk, "The one-liner")
+            themes_raw = self._extract_story_label(chunk, "Themes")
+            raw_notes = self._extract_story_label(chunk, "Raw notes")
+            situation = self._extract_story_label(chunk, "Situation")
+            task = self._extract_story_label(chunk, "Task")
+            action = self._extract_story_label(chunk, "Action")
+            result = self._extract_story_label(chunk, "Result")
+            if not action or not result:
+                continue
+            themes = [t.strip() for t in themes_raw.split(",") if t.strip()] if themes_raw else [title]
+            stories.append({
+                "title": title,
+                "themes": themes,
+                "one_liner": one_liner or self._derive_story_one_liner(title, situation, result),
+                "situation": situation,
+                "task": task,
+                "action": action,
+                "result": result,
+                "raw_notes": raw_notes,
+            })
+        return stories
+
+    def _extract_story_title(self, chunk: str) -> str:
+        heading_match = re.search(r"^##\s+(?:STORY-\d+\s+·\s+)?(.+)$", chunk, re.MULTILINE)
+        if heading_match:
+            return heading_match.group(1).strip()
+        title_match = re.search(r"\*\*Title:\*\*\s*(.+)", chunk)
+        if title_match:
+            return title_match.group(1).strip()
+        one_liner = self._extract_story_label(chunk, "The one-liner")
+        if one_liner:
+            return one_liner.split("—")[0].split(" - ")[0].strip()[:80]
+        return ""
+
+    def _extract_story_label(self, chunk: str, label: str) -> str:
+        match = re.search(
+            rf"\*\*{re.escape(label)}:\*\*\s*(.+?)(?=\n\*\*[^*]+:\*\*|\n## |\n---|\Z)",
+            chunk,
+            re.DOTALL,
+        )
+        return match.group(1).strip() if match else ""
+
+    def _derive_story_one_liner(self, title: str, situation: str, result: str) -> str:
+        for candidate in [result, situation]:
+            sentence = re.split(r"(?<=[.!?])\s+", candidate.strip())[0].strip()
+            if sentence:
+                return sentence[:180]
+        return title
+
+    def _build_story_block(self, story_id: str, story: dict[str, str | list[str]]) -> str:
+        return "\n".join([
+            f'## {story_id} · {story["title"]}',
+            "",
+            self._build_story_block_body(story),
+            "",
+            "---",
+        ])
+
+    def _build_story_block_body(self, story: dict[str, str | list[str]]) -> str:
+        themes = story.get("themes", [])
+        theme_text = ", ".join(themes) if isinstance(themes, list) else str(themes)
+        lines = [
+            f"**Themes:** {theme_text}",
+            f'**The one-liner:** {story.get("one_liner", "")}'.rstrip(),
+            f'**Situation:** {story.get("situation", "")}'.rstrip(),
+        ]
+        if story.get("task", ""):
+            lines.append(f'**Task:** {story.get("task", "")}'.rstrip())
+        lines.extend([
+            f'**Action:** {story.get("action", "")}'.rstrip(),
+            f'**Result:** {story.get("result", "")}'.rstrip(),
+        ])
+        if story.get("raw_notes", ""):
+            lines.append(f'**Raw notes:** {story.get("raw_notes", "")}'.rstrip())
+        return "\n".join(lines)
+
+    def _parse_existing_story_entries(self, stories_md: str) -> list[dict[str, str]]:
+        entries: list[dict[str, str]] = []
+        for match in re.finditer(
+            r"^## (STORY-\d+)\s+·\s+(.+?)\n(.*?)(?=^## STORY-|\Z)",
+            stories_md,
+            re.MULTILINE | re.DOTALL,
+        ):
+            body = match.group(3)
+            one_liner_match = re.search(r"\*\*The one-liner:\*\*\s*(.+)", body)
+            entries.append({
+                "story_id": match.group(1).strip(),
+                "title": match.group(2).strip(),
+                "one_liner": one_liner_match.group(1).strip() if one_liner_match else "",
+            })
+        return entries
+
+    def _next_story_number(self, entries: list[dict[str, str]]) -> int:
+        existing_numbers = []
+        for entry in entries:
+            match = re.search(r"STORY-(\d+)", entry["story_id"])
+            if match:
+                existing_numbers.append(int(match.group(1)))
+        return max(existing_numbers, default=0) + 1
+
+    def _merge_updates(self, updates: list[MemoryUpdate]) -> list[MemoryUpdate]:
+        merged: list[MemoryUpdate] = []
+        seen: set[tuple[str, str, str, str]] = set()
+        for update in updates:
+            key = (update.file, update.section, update.action, update.content.strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(update)
+        return merged
+
 
 class CoreAgent(BaseAgent):
     intent = "GENERAL"; prompt_name = "core_agent"
@@ -498,18 +835,7 @@ class BQCoachAgent(BaseAgent):
     intent = "BQ"; prompt_name = "bq_coach"
 
     async def post_process(self, response, message, ctx):
-        updates = await super().post_process(response, message, ctx)
-        if "follow-up" in response.lower() and "STORY-" in response:
-            updates.append(
-                MemoryUpdate(
-                    file="stories_bank.md",
-                    section="Quick-reference index",
-                    action="append",
-                    content=f"- BQ follow-up note: {message[:80].strip()}...",
-                    reason="BQ session follow-up notes",
-                )
-            )
-        return updates
+        return await super().post_process(response, message, ctx)
 
 class DebriefAgent(BaseAgent):
     intent = "DEBRIEF"; prompt_name = "debrief_agent"

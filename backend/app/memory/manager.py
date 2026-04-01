@@ -19,7 +19,7 @@ STUBS = {
     "L0_identity.md": "# L0 · Core Identity\n> Fill this out or run onboarding.\n\n## Who I am\n\n## Career narrative\n\n## Target role\n\n## Technical skills\n\n## Signature projects\n",
     "L1_campaign.md": "# L1 · Campaign State\n> Updated every session.\n\n## Status snapshot\n\n| Metric | Value |\n|---|---|\n| Active applications | 0 |\n\n## Weekly focus\n\n## Mindset check\n\n## Strategy notes\n",
     "L2_knowledge.md": "# L2 · Knowledge Base\n> Grows as you learn.\n\n## Job search strategy\n\n## Sourcing channels\n\n## Market intelligence\n\n## Interview prep learnings\n\n## Insights from content\n\n## Strategy iteration log\n",
-    "stories_bank.md": "# Stories Bank\n\n## Quick-reference index\n\n| Theme | Stories |\n|---|---|\n\n",
+    "stories_bank.md": "# Stories Bank\n\n## Quick-reference index\n\n| Theme | Stories |\n|---|---|\n\n## Coverage gaps\n\n- None yet.\n\n",
     "resume_versions.md": "# Resume Versions\n\n## Current version: v1.0\n\n**Created:** [DATE]\n**Status:** Active\n\n### Bullets\n\n",
     "interview_log.md": "# Interview Log\n\n## Active interviews\n\n## Cross-company patterns\n\n### Questions that keep coming up\n\n### My blind spots\n",
 }
