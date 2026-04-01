@@ -14,7 +14,7 @@ This README is written as a practical setup guide. If you follow it top to botto
 - create a working `.env`
 - start the backend
 - start the frontend
-- open `http://localhost:3000/login`
+- open `http://127.0.0.1:3000/login`
 - sign in successfully
 
 ## What works in the current repo snapshot
@@ -30,11 +30,13 @@ This README is written as a practical setup guide. If you follow it top to botto
 - Persistent memory stored in Markdown and versioned with Git
 - AI chat with intent routing for intake, stories, resume help, BQ practice, debrief, strategy, and scouting
 - Company pipeline tracking
-- Story bank with local vector search
+- Story bank with structured STAR details and local vector search
 - Interview log and review flow
 - Local SQLite storage
 - Optional Claude or Ollama provider setup
 - Settings UI for provider selection, model pulling, and Ollama-first routing
+- Settings UI for per-function custom instructions
+- Job Scout progress cards with run status and stage updates
 
 ## Tech stack
 
@@ -144,7 +146,7 @@ GIT_AUTO_COMMIT=true
 
 DEBUG=true
 LOG_LEVEL=info
-ALLOWED_ORIGINS=["http://localhost:3000"]
+ALLOWED_ORIGINS=["http://127.0.0.1:3000","http://localhost:3000"]
 
 SCOUT_ENABLED=false
 SCOUT_DEFAULT_LOCATION=San Francisco, CA
@@ -211,7 +213,7 @@ OLLAMA_EMBED_MODEL=nomic-embed-text
 After the app is running, open:
 
 ```text
-http://localhost:3000/settings
+http://127.0.0.1:3000/settings
 ```
 
 From there you can:
@@ -220,6 +222,7 @@ From there you can:
 - set per-task overrides for `chat`, `classify`, `score`, and `embed`
 - choose the active Ollama chat and embedding models
 - pull Ollama models directly from the UI
+- edit custom instructions for `Global`, `General Chat`, `BQ`, `Story`, `Resume`, `Debrief`, `Strategy`, `Scout`, and `Intake`
 - apply the selection without manually editing `.env`
 
 When you click `Apply`, Futuro will:
@@ -227,6 +230,34 @@ When you click `Apply`, Futuro will:
 - save the provider settings into `.env`
 - rebuild provider routing immediately
 - prefer Ollama first when `Auto (prefer Ollama)` is selected
+
+## Custom instructions in Settings
+
+The Settings page also lets you customize how Futuro behaves for different functions without editing prompts in code.
+
+You can add instructions for:
+
+- all functions globally
+- general chat
+- BQ coaching
+- story crafting
+- resume editing
+- interview debrief
+- strategy planning
+- job scouting
+- intake
+
+Example:
+
+```text
+For every BQ answer, score it out of 10, rewrite it in STAR, and push harder on ownership, tradeoffs, and measurable results.
+```
+
+Important notes:
+
+- custom instructions are saved locally in `backend/data/custom_instructions.json`
+- they are applied on the next request immediately
+- you do not need to restart the backend after saving them
 
 ## Pull Ollama models from the UI
 
@@ -243,6 +274,33 @@ Important notes:
 - model downloads are allowed from the Settings page even if `.env` currently has `OLLAMA_ENABLED=false`
 - after a model finishes downloading, enable Ollama in the Settings page or `.env` if you want Futuro to actively use it
 - large models like `qwen2.5:32b` may take a long time and require substantial RAM and disk space
+
+## Memory and story bank behavior
+
+Futuro stores long-term memory in Markdown under `backend/data/memory`.
+
+Important memory files include:
+
+- `L0_identity.md`
+- `resume_versions.md`
+- `stories_bank.md`
+
+Current behavior:
+
+- chat can update memory after a response when Futuro detects durable user information
+- pasted resume content is saved into resume memory instead of only staying in chat history
+- BQ and story conversations can be saved into `stories_bank.md`
+- story entries can include structured STAR details, not just titles or one-line summaries
+
+For the best results when building the story bank, give Futuro the real story details:
+
+- situation
+- task
+- action
+- result
+- metrics or concrete outcomes
+
+If you only give a one-line summary, Futuro can save the skeleton, but it cannot invent the missing specifics for you.
 
 ## Start the app
 
@@ -277,12 +335,13 @@ Expected result:
 
 After both servers are running:
 
-1. Open `http://localhost:3000/login`
+1. Open `http://127.0.0.1:3000/login`
 2. Sign in
-3. Open `http://localhost:3000/settings`
+3. Open `http://127.0.0.1:3000/settings`
 4. Choose `Auto (prefer Ollama)`
 5. Pull an Ollama model if needed
 6. Click `Apply`
+7. Optional: add custom instructions for BQ, Story, Resume, or Scout
 
 If your selected Ollama model is not downloaded yet, Futuro may temporarily fall back to Claude when Claude is configured.
 
@@ -342,6 +401,19 @@ And in the app itself:
 - confirm the `Provider preference` section shows the mode you selected
 - confirm `Provider health` and `Task routing` reflect the actual active provider
 
+## Job Scout progress
+
+When you run a scout config from `/jobs`, Futuro now shows progress directly in the UI.
+
+You should see:
+
+- run status such as `Running`, `Completed`, or `Failed`
+- a progress bar
+- current stage text such as scraping, deduplicating, scoring, or saving
+- run outcome counts like jobs found, new jobs, and scored jobs
+
+This makes it much easier to tell whether a scout is actually working or stuck.
+
 ## What you can do before LLM setup
 
 Even without Claude or Ollama configured, you can still:
@@ -367,7 +439,7 @@ What will still need a provider:
 Use JSON array syntax in `.env`, not a bare string:
 
 ```env
-ALLOWED_ORIGINS=["http://localhost:3000"]
+ALLOWED_ORIGINS=["http://127.0.0.1:3000","http://localhost:3000"]
 ```
 
 ### `.env` is not being read
@@ -400,6 +472,14 @@ OLLAMA_ENABLED=false
 ```
 
 Configure Claude or Ollama to enable chat.
+
+### I saved custom instructions but the behavior did not change
+
+Check these:
+
+- you saved them from `/settings`
+- you are testing the matching function, for example `BQ` instructions while doing BQ practice
+- you sent a new request after saving; instructions apply on the next request, not retroactively to old responses
 
 ### I selected `Auto (prefer Ollama)` but Futuro still uses Claude
 
