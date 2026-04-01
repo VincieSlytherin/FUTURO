@@ -34,6 +34,7 @@ This README is written as a practical setup guide. If you follow it top to botto
 - Interview log and review flow
 - Local SQLite storage
 - Optional Claude or Ollama provider setup
+- Settings UI for provider selection, model pulling, and Ollama-first routing
 
 ## Tech stack
 
@@ -167,6 +168,14 @@ With that setup:
 
 ## Optional provider setup
 
+Recommended default: use `Auto (prefer Ollama)`.
+
+That gives you this behavior:
+
+- Futuro uses Ollama first when the local model is available
+- if Ollama is unavailable, Futuro falls back to Claude when Claude is configured
+- you can still force Claude-only or Ollama-only behavior in the Settings UI
+
 ### Option A: Use Claude
 
 Set:
@@ -197,6 +206,44 @@ OLLAMA_CHAT_MODEL=qwen2.5:7b
 OLLAMA_EMBED_MODEL=nomic-embed-text
 ```
 
+### Option C: Use the Settings UI
+
+After the app is running, open:
+
+```text
+http://localhost:3000/settings
+```
+
+From there you can:
+
+- choose `Auto (prefer Ollama)`, `Ollama only`, or `Claude only`
+- set per-task overrides for `chat`, `classify`, `score`, and `embed`
+- choose the active Ollama chat and embedding models
+- pull Ollama models directly from the UI
+- apply the selection without manually editing `.env`
+
+When you click `Apply`, Futuro will:
+
+- save the provider settings into `.env`
+- rebuild provider routing immediately
+- prefer Ollama first when `Auto (prefer Ollama)` is selected
+
+## Pull Ollama models from the UI
+
+You no longer need to rely only on terminal commands.
+
+In the Settings page, the Ollama section lets you:
+
+- click `Pull` for models like `qwen2.5:7b`, `qwen2.5:14b`, `qwen2.5:32b`, and `nomic-embed-text`
+- see live download progress
+- see percentage, bytes downloaded, and recent status lines during the pull
+
+Important notes:
+
+- model downloads are allowed from the Settings page even if `.env` currently has `OLLAMA_ENABLED=false`
+- after a model finishes downloading, enable Ollama in the Settings page or `.env` if you want Futuro to actively use it
+- large models like `qwen2.5:32b` may take a long time and require substantial RAM and disk space
+
 ## Start the app
 
 Open two terminals.
@@ -226,6 +273,19 @@ Expected result:
 
 - frontend starts on `http://127.0.0.1:3000`
 
+## Recommended first use
+
+After both servers are running:
+
+1. Open `http://localhost:3000/login`
+2. Sign in
+3. Open `http://localhost:3000/settings`
+4. Choose `Auto (prefer Ollama)`
+5. Pull an Ollama model if needed
+6. Click `Apply`
+
+If your selected Ollama model is not downloaded yet, Futuro may temporarily fall back to Claude when Claude is configured.
+
 ## Verify everything
 
 ### Check backend health
@@ -241,6 +301,8 @@ You should see something like:
 ```
 
 If `providers` is empty, that is okay for first boot. It just means Claude/Ollama is not configured yet.
+
+If you already enabled provider routing in Settings, the `providers` object should reflect the active routing choice.
 
 ### Check the login page
 
@@ -265,6 +327,20 @@ curl -X POST http://127.0.0.1:8000/api/auth/login \
 ```
 
 If the password matches `USER_PASSWORD_HASH`, you will get back an `access_token`.
+
+### Verify provider routing
+
+After saving provider settings in the UI, you can check the active routing:
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+And in the app itself:
+
+- open `/settings`
+- confirm the `Provider preference` section shows the mode you selected
+- confirm `Provider health` and `Task routing` reflect the actual active provider
 
 ## What you can do before LLM setup
 
@@ -324,6 +400,18 @@ OLLAMA_ENABLED=false
 ```
 
 Configure Claude or Ollama to enable chat.
+
+### I selected `Auto (prefer Ollama)` but Futuro still uses Claude
+
+That usually means the selected Ollama model is not available yet.
+
+Check these:
+
+- Ollama is running
+- the model has finished downloading
+- the selected chat model in Settings matches a pulled local model
+
+If Ollama is unavailable and Claude is configured, `Auto` will fall back to Claude by design.
 
 ## Useful files
 

@@ -1,5 +1,18 @@
 # Development Setup
 
+This guide matches the current Futuro repo behavior.
+
+If you follow it top to bottom, you should be able to:
+
+- install backend and frontend dependencies
+- create a working `.env`
+- start the backend
+- start the frontend
+- open `http://localhost:3000/login`
+- sign in successfully
+- choose providers from the Settings UI
+- pull Ollama models with live progress
+
 ## Prerequisites
 
 | Tool | Recommended version | Notes |
@@ -17,8 +30,10 @@ Optional:
 ## What the current codebase actually does
 
 The current repo snapshot works like this:
+
 - SQLite tables are created automatically on backend startup via SQLAlchemy `create_all()`
 - the memory directory and its stub Markdown files are created automatically by the memory manager
+- the app can boot in auth/data-only mode even when Claude and Ollama are both not configured yet
 - there are no checked-in Alembic migration files in this snapshot
 
 Because of that, you do not need a migration step to get the app running locally.
@@ -27,14 +42,29 @@ Because of that, you do not need a migration step to get the app running locally
 
 The backend dependency list lives in [backend/requirements.txt](/Users/ranju1008/Desktop/futuro/backend/requirements.txt).
 
-If you already have a Conda environment named `futuro`, activate that first and use it.
+Recommended path: if you already have a Conda environment named `futuro`, use that.
 
 ```bash
 conda activate futuro
 python --version
 ```
 
-Otherwise, create a virtual environment and install dependencies:
+Install backend dependencies from the project root:
+
+```bash
+cd /Users/ranju1008/Desktop/futuro
+pip install -r backend/requirements.txt
+```
+
+If you do not already have that Conda environment, you can create it:
+
+```bash
+conda create -n futuro python=3.12 -y
+conda activate futuro
+pip install -r backend/requirements.txt
+```
+
+If you prefer `venv`, that still works:
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro
@@ -44,13 +74,12 @@ python -m pip install --upgrade pip
 pip install -r backend/requirements.txt
 ```
 
-If `python3.12` is not available on your machine, use your installed Python 3.12 binary instead.
-
 ## Frontend requirements
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro/frontend
 npm install
+cd ..
 ```
 
 ## Detailed local configuration
@@ -68,7 +97,11 @@ cp .env.example .env
 openssl rand -hex 32
 ```
 
-Paste the output into `JWT_SECRET=` in `.env`.
+Paste the output into:
+
+```env
+JWT_SECRET=your-generated-secret
+```
 
 ### 3. Generate `USER_PASSWORD_HASH`
 
@@ -79,47 +112,77 @@ cd /Users/ranju1008/Desktop/futuro
 python -c "import bcrypt; print(bcrypt.hashpw(b'your-password-here', bcrypt.gensalt()).decode())"
 ```
 
-Paste the output into `USER_PASSWORD_HASH=` in `.env`.
+Paste the output into:
 
-### 4. Fill the minimum required `.env` values
+```env
+USER_PASSWORD_HASH=your-generated-bcrypt-hash
+```
 
-Minimal first-boot setup:
+### 4. Fill `.env` for the safest first boot
+
+Use values like this:
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-not-set
 JWT_SECRET=your-generated-secret
 USER_PASSWORD_HASH=your-generated-bcrypt-hash
-DEBUG=true
-ALLOWED_ORIGINS=["http://localhost:3000"]
-SCOUT_ENABLED=false
-LLM_PROVIDER=auto
-OLLAMA_ENABLED=false
-```
 
-Claude-based setup:
-
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-JWT_SECRET=your-generated-secret
-USER_PASSWORD_HASH=your-generated-bcrypt-hash
-DEBUG=true
-ALLOWED_ORIGINS=["http://localhost:3000"]
-LLM_PROVIDER=claude
 CLAUDE_MODEL=claude-sonnet-4-5
-```
+MAX_TOKENS=8192
 
-The default storage paths in `.env.example` already match this repo:
-
-```env
 DATA_DIR=./backend/data
 MEMORY_DIR=./backend/data/memory
 CHROMA_DIR=./backend/data/chroma
 DB_PATH=./backend/data/futuro.db
+
+GIT_AUTO_COMMIT=true
+
+DEBUG=true
+LOG_LEVEL=info
+ALLOWED_ORIGINS=["http://localhost:3000"]
+
+SCOUT_ENABLED=false
+SCOUT_DEFAULT_LOCATION=San Francisco, CA
+SCOUT_DEFAULT_SITES=linkedin,indeed,glassdoor
+
+LLM_PROVIDER=auto
+OLLAMA_ENABLED=false
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=qwen2.5:7b
+OLLAMA_EMBED_MODEL=nomic-embed-text
+OLLAMA_TIMEOUT=120.0
+OLLAMA_KEEP_ALIVE=10m
 ```
 
-### 5. Optional Ollama setup
+With that setup:
 
-If you want to run locally without Anthropic:
+- the app will boot
+- login will work
+- database and memory routes will work
+- chat stays unavailable until you configure Claude or Ollama
+
+## Provider setup
+
+Recommended default: `Auto (prefer Ollama)`.
+
+That gives you this behavior:
+
+- Futuro uses Ollama first when the local model is available
+- if Ollama is unavailable, Futuro falls back to Claude when Claude is configured
+- you can still force Claude-only or Ollama-only behavior in the Settings UI
+
+### Option A: Use Claude
+
+Set:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-your-real-key
+LLM_PROVIDER=claude
+```
+
+### Option B: Use Ollama
+
+Install Ollama and pull models first:
 
 ```bash
 ollama serve
@@ -127,7 +190,7 @@ ollama pull qwen2.5:7b
 ollama pull nomic-embed-text
 ```
 
-Then set:
+Then update `.env`:
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-not-set
@@ -138,32 +201,75 @@ OLLAMA_CHAT_MODEL=qwen2.5:7b
 OLLAMA_EMBED_MODEL=nomic-embed-text
 ```
 
-If you want automatic fallback instead, use:
+### Option C: Use the Settings UI
 
-```env
-LLM_PROVIDER=auto
+After the app is running, open:
+
+```text
+http://localhost:3000/settings
 ```
+
+From there you can:
+
+- choose `Auto (prefer Ollama)`, `Ollama only`, or `Claude only`
+- set per-task overrides for `chat`, `classify`, `score`, and `embed`
+- choose the active Ollama chat and embedding models
+- pull Ollama models directly from the UI
+- apply the selection without manually editing `.env`
+
+When you click `Apply`, Futuro will:
+
+- save the provider settings into `.env`
+- rebuild provider routing immediately
+- prefer Ollama first when `Auto (prefer Ollama)` is selected
+
+## Pull Ollama models from the UI
+
+In the Settings page, the Ollama section lets you:
+
+- click `Pull` for models like `qwen2.5:7b`, `qwen2.5:14b`, `qwen2.5:32b`, and `nomic-embed-text`
+- see live download progress
+- see percentage, bytes downloaded, and recent status lines during the pull
+
+Important notes:
+
+- model downloads are allowed from the Settings page even if `.env` currently has `OLLAMA_ENABLED=false`
+- after a model finishes downloading, enable Ollama in the Settings page or `.env` if you want Futuro to actively use it
+- large models like `qwen2.5:32b` may take a long time and require substantial RAM and disk space
 
 ## Running the app
 
-### Start the backend
+Open two terminals.
+
+### Terminal 1: backend
+
+If you use Conda:
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro
+conda activate futuro
+cd backend
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+If you use `venv`:
+
+```bash
+cd /Users/ranju1008/Desktop/futuro
+source backend/.venv/bin/activate
 cd backend
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 On first startup, the backend will:
+
 - create `backend/data/`
 - create the SQLite database file
 - create all tables
 - create the ChromaDB directory
 - initialize the memory directory as needed
 
-### Start the frontend
-
-Open a second terminal:
+### Terminal 2: frontend
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro/frontend
@@ -173,24 +279,11 @@ npx next dev -H 127.0.0.1 -p 3000
 ### Open the app
 
 - Frontend: `http://localhost:3000`
+- Login page: `http://localhost:3000/login`
 - Backend health: `http://127.0.0.1:8000/api/health`
 - Backend docs: `http://127.0.0.1:8000/docs`
 
 The docs page is only visible when `DEBUG=true`.
-
-## Shortcut commands
-
-After dependencies are installed, you can use:
-
-```bash
-cd /Users/ranju1008/Desktop/futuro
-make setup
-make dev
-make dev-backend
-make dev-frontend
-```
-
-The manual steps above are still the clearest path if you want full control over each config value.
 
 ## First-run verification
 
@@ -212,9 +305,48 @@ curl -X POST http://127.0.0.1:8000/api/auth/login \
 
 Expected result: JSON containing `access_token`.
 
+### Provider routing check
+
+Open:
+
+```text
+http://localhost:3000/settings
+```
+
+Verify that:
+
+- the provider preference shows the mode you selected
+- Ollama health is visible in the provider status area
+- if `Auto (prefer Ollama)` is selected but the Ollama chat model is not pulled yet, Futuro temporarily falls back to Claude
+
+## Shortcut commands
+
+After dependencies are installed, you can use:
+
+```bash
+cd /Users/ranju1008/Desktop/futuro
+make setup
+make dev
+make dev-backend
+make dev-frontend
+```
+
+The manual steps above are still the clearest path if you want full control over each config value.
+
 ## Running tests
 
 ### Backend
+
+If you use Conda:
+
+```bash
+cd /Users/ranju1008/Desktop/futuro
+conda activate futuro
+cd backend
+pytest tests -v
+```
+
+If you use `venv`:
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro
@@ -227,7 +359,7 @@ pytest tests -v
 
 ```bash
 cd /Users/ranju1008/Desktop/futuro/frontend
-npm test -- --watchAll=false
+npx tsc --noEmit
 ```
 
 ## Common issues
@@ -253,6 +385,16 @@ ollama serve
 ollama pull qwen2.5:7b
 ollama pull nomic-embed-text
 ```
+
+If you are using `Auto (prefer Ollama)` and the selected model is not pulled yet, Futuro may fall back to Claude instead of using Ollama immediately.
+
+### The Settings page shows Ollama but chat still uses Claude
+
+This usually means one of these is true:
+
+- the selected Ollama chat model has not finished downloading yet
+- Ollama is not running
+- `Auto (prefer Ollama)` is enabled and Claude is being used as a fallback
 
 ## Useful commands
 
