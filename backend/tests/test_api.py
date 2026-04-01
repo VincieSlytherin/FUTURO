@@ -83,6 +83,36 @@ async def test_get_memory_file(auth_client):
 
 
 @pytest.mark.asyncio
+async def test_custom_instructions_api_round_trip(auth_client, tmp_path, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "custom_instructions_path", tmp_path / "custom_instructions.json")
+
+    get_resp = await auth_client.get("/api/instructions")
+    assert get_resp.status_code == 200
+    assert "bq_instruction" in get_resp.json()
+
+    put_resp = await auth_client.put("/api/instructions", json={
+        "global_instruction": "Be concise.",
+        "general_instruction": "",
+        "bq_instruction": "Always score my answer out of 10 first.",
+        "story_instruction": "",
+        "resume_instruction": "",
+        "debrief_instruction": "",
+        "strategy_instruction": "",
+        "scout_instruction": "",
+        "intake_instruction": "",
+    })
+    assert put_resp.status_code == 200
+
+    read_back = await auth_client.get("/api/instructions")
+    assert read_back.status_code == 200
+    payload = read_back.json()
+    assert payload["global_instruction"] == "Be concise."
+    assert payload["bq_instruction"] == "Always score my answer out of 10 first."
+
+
+@pytest.mark.asyncio
 async def test_write_memory_file(auth_client):
     new_content = "# L0 · Core Identity\n\nTest content.\n"
     resp = await auth_client.put(
@@ -388,3 +418,27 @@ async def test_story_post_process_saves_full_star_details():
     assert "**Task:** I needed to redesign the system quickly" in stories
     assert "**Action:** I audited failure patterns" in stories
     assert "**Result:** Execution failure rate dropped from 31% to 5%" in stories
+
+
+def test_agent_build_system_includes_custom_instructions(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.custom_instructions import CustomInstructionManager
+    from app.memory.manager import MemoryManager
+    from app.agents.base import BQCoachAgent
+
+    custom_path = tmp_path / "custom_instructions.json"
+    monkeypatch.setattr(settings, "custom_instructions_path", custom_path)
+
+    manager = CustomInstructionManager(custom_path)
+    manager.save({
+        "global": "Keep answers direct.",
+        "BQ": "Always rate the answer first, then rewrite it in STAR.",
+    })
+
+    memory = MemoryManager(tmp_path / "memory", git_auto_commit=False)
+    agent = BQCoachAgent(memory)
+    ctx = memory.load_context("BQ")
+    system = agent._build_system(ctx)
+
+    assert "Keep answers direct." in system
+    assert "Always rate the answer first, then rewrite it in STAR." in system

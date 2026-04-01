@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     memory_dir: Path = BACKEND_ROOT / "data/memory"
     chroma_dir: Path = BACKEND_ROOT / "data/chroma"
     db_path: Path = BACKEND_ROOT / "data/futuro.db"
+    custom_instructions_path: Path = BACKEND_ROOT / "data/custom_instructions.json"
 
     # Memory
     git_auto_commit: bool = True
@@ -62,6 +63,7 @@ class Settings(BaseSettings):
         self.memory_dir = self._resolve_path(self.memory_dir)
         self.chroma_dir = self._resolve_path(self.chroma_dir)
         self.db_path = self._resolve_path(self.db_path)
+        self.custom_instructions_path = self._resolve_path(self.custom_instructions_path)
 
     @property
     def db_url(self) -> str:

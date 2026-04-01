@@ -13,10 +13,15 @@ function getCookie(name: string): string {
 }
 
 async function apiFetch(path: string, opts: RequestInit = {}) {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: { Authorization: `Bearer ${getCookie("futuro_token")}`, "Content-Type": "application/json", ...(opts.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, {
+      ...opts,
+      headers: { Authorization: `Bearer ${getCookie("futuro_token")}`, "Content-Type": "application/json", ...(opts.headers ?? {}) },
+    });
+  } catch {
+    throw new Error(`Could not reach Futuro backend at ${API}. Make sure the local API server is running.`);
+  }
   if (!res.ok) {
     const detail = await res.json().catch(() => null);
     throw new Error(detail?.detail ?? `${res.status}`);
@@ -78,6 +83,29 @@ interface ProviderConfigForm {
   ollama_chat_model: string;
   ollama_embed_model: string;
 }
+
+interface InstructionConfigForm {
+  global_instruction: string;
+  general_instruction: string;
+  bq_instruction: string;
+  story_instruction: string;
+  resume_instruction: string;
+  debrief_instruction: string;
+  strategy_instruction: string;
+  scout_instruction: string;
+  intake_instruction: string;
+}
+
+type InstructionField =
+  | "global_instruction"
+  | "general_instruction"
+  | "bq_instruction"
+  | "story_instruction"
+  | "resume_instruction"
+  | "debrief_instruction"
+  | "strategy_instruction"
+  | "scout_instruction"
+  | "intake_instruction";
 
 const QWEN_MODELS = [
   { id: "qwen2.5:7b",    label: "Qwen 2.5 7B",  ram: "4 GB",  note: "Fast, daily use"        },
@@ -249,6 +277,21 @@ export default function SettingsPage() {
   const [saving,     setSaving]     = useState(false);
   const [saveError,  setSaveError]  = useState<string | null>(null);
   const [saveNote,   setSaveNote]   = useState<string | null>(null);
+  const [instructionForm, setInstructionForm] = useState<InstructionConfigForm>({
+    global_instruction: "",
+    general_instruction: "",
+    bq_instruction: "",
+    story_instruction: "",
+    resume_instruction: "",
+    debrief_instruction: "",
+    strategy_instruction: "",
+    scout_instruction: "",
+    intake_instruction: "",
+  });
+  const [instructionSaving, setInstructionSaving] = useState(false);
+  const [instructionError, setInstructionError] = useState<string | null>(null);
+  const [instructionNote, setInstructionNote] = useState<string | null>(null);
+  const [activeInstructionField, setActiveInstructionField] = useState<InstructionField>("bq_instruction");
   const [form,       setForm]       = useState<ProviderConfigForm>({
     llm_provider: "auto",
     chat_provider: "",
@@ -272,6 +315,8 @@ export default function SettingsPage() {
       setStatus(s);
       setRouting(s.routing ?? {});
       setOllamaModels(m.models ?? []);
+      const instructions = await apiFetch("/api/instructions") as InstructionConfigForm;
+      setInstructionForm(instructions);
     } catch { /* ignore */ }
     setLoading(false);
   }
@@ -387,6 +432,94 @@ export default function SettingsPage() {
       setSaving(false);
     }
   }
+
+  async function saveInstructions() {
+    setInstructionSaving(true);
+    setInstructionError(null);
+    setInstructionNote(null);
+
+    try {
+      const next = await apiFetch("/api/instructions", {
+        method: "PUT",
+        body: JSON.stringify(instructionForm),
+      }) as InstructionConfigForm & { saved: boolean };
+      setInstructionForm({
+        global_instruction: next.global_instruction,
+        general_instruction: next.general_instruction,
+        bq_instruction: next.bq_instruction,
+        story_instruction: next.story_instruction,
+        resume_instruction: next.resume_instruction,
+        debrief_instruction: next.debrief_instruction,
+        strategy_instruction: next.strategy_instruction,
+        scout_instruction: next.scout_instruction,
+        intake_instruction: next.intake_instruction,
+      });
+      setInstructionNote("Saved. New chats in that function will use the updated instruction immediately.");
+    } catch (e: any) {
+      setInstructionError(e.message ?? "Failed to save instructions");
+    } finally {
+      setInstructionSaving(false);
+    }
+  }
+
+  const INSTRUCTION_FIELDS: Array<{ key: InstructionField; label: string; desc: string; placeholder: string }> = [
+    {
+      key: "global_instruction",
+      label: "Global",
+      desc: "Applies to every function.",
+      placeholder: "Example: Keep answers concise, use bullet points only when useful, and avoid generic praise.",
+    },
+    {
+      key: "general_instruction",
+      label: "General Chat",
+      desc: "Normal conversation mode.",
+      placeholder: "Example: Ask one clarifying question before giving strategy advice.",
+    },
+    {
+      key: "bq_instruction",
+      label: "BQ",
+      desc: "Behavioral interview coaching.",
+      placeholder: "Example: For every BQ answer, first rate it out of 10, then rewrite it in STAR with stronger ownership and impact.",
+    },
+    {
+      key: "story_instruction",
+      label: "Story",
+      desc: "Story Builder mode.",
+      placeholder: "Example: Always push for concrete metrics and explicit 'I' ownership before saving a story.",
+    },
+    {
+      key: "resume_instruction",
+      label: "Resume",
+      desc: "Resume editing mode.",
+      placeholder: "Example: Optimize for senior applied AI roles and keep bullets accomplishment-first.",
+    },
+    {
+      key: "debrief_instruction",
+      label: "Debrief",
+      desc: "Interview debrief mode.",
+      placeholder: "Example: After every debrief, end with a short next-time prep plan.",
+    },
+    {
+      key: "strategy_instruction",
+      label: "Strategy",
+      desc: "Job-search planning mode.",
+      placeholder: "Example: Prioritize high-sponsorship, high-fit roles and be blunt about weak channels.",
+    },
+    {
+      key: "scout_instruction",
+      label: "Scout",
+      desc: "Job-scout and job-fit behavior.",
+      placeholder: "Example: Be stricter on sponsorship risk and score startup roles lower unless they clearly fit my background.",
+    },
+    {
+      key: "intake_instruction",
+      label: "Intake",
+      desc: "URL/content ingestion mode.",
+      placeholder: "Example: Summaries should always end with 3 concrete takeaways I can use this week.",
+    },
+  ];
+
+  const activeInstructionMeta = INSTRUCTION_FIELDS.find((field) => field.key === activeInstructionField)!;
 
   return (
     <div className="flex flex-col h-full overflow-y-auto scrollbar-thin">
@@ -543,6 +676,79 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </section>
+
+        {/* ── Custom instructions ─────────────────────────────────────────── */}
+        <section>
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700">Custom instructions</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Add your own rules for each Futuro function. Useful when you want BQ, Resume, or Strategy mode to answer in a very specific way.
+              </p>
+            </div>
+            <button
+              onClick={saveInstructions}
+              disabled={instructionSaving}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-futuro-500 hover:bg-futuro-600 disabled:opacity-50 text-white rounded-lg transition-colors flex-shrink-0"
+            >
+              {instructionSaving ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+              {instructionSaving ? "Saving…" : "Save instructions"}
+            </button>
+          </div>
+
+          {(instructionNote || instructionError) && (
+            <div className={clsx(
+              "mb-4 rounded-xl border px-4 py-3 text-xs",
+              instructionError ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"
+            )}>
+              {instructionError ?? instructionNote}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)] gap-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-2">
+              <div className="space-y-1">
+                {INSTRUCTION_FIELDS.map((field) => (
+                  <button
+                    key={field.key}
+                    onClick={() => setActiveInstructionField(field.key)}
+                    className={clsx(
+                      "w-full rounded-lg px-3 py-2 text-left transition-colors",
+                      activeInstructionField === field.key
+                        ? "bg-futuro-50 text-futuro-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    )}
+                  >
+                    <p className="text-sm font-medium">{field.label}</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{field.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <div className="mb-3">
+                <h3 className="text-sm font-medium text-gray-900">{activeInstructionMeta.label}</h3>
+                <p className="mt-1 text-xs text-gray-500">{activeInstructionMeta.desc}</p>
+              </div>
+              <textarea
+                value={instructionForm[activeInstructionField]}
+                onChange={(e) =>
+                  setInstructionForm((current) => ({
+                    ...current,
+                    [activeInstructionField]: e.target.value,
+                  }))
+                }
+                rows={10}
+                placeholder={activeInstructionMeta.placeholder}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-futuro-500"
+              />
+              <p className="mt-2 text-xs text-gray-400">
+                Tip: write concrete rules like tone, structure, scoring rubric, what to prioritize, or what to avoid.
+              </p>
+            </div>
           </div>
         </section>
 

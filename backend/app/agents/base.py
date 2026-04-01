@@ -10,6 +10,8 @@ import re
 from pathlib import Path
 from typing import AsyncIterator
 
+from app.config import settings
+from app.custom_instructions import CustomInstructionManager
 from app.memory.manager import AgentContext, MemoryManager
 from app.models.schemas import MemoryUpdate
 from app.providers.base import TaskType
@@ -107,9 +109,19 @@ class BaseAgent:
     def __init__(self, memory: MemoryManager):
         self.memory = memory
         self._agent_prompt = _load_prompt(self.prompt_name)
+        self._custom_instructions = CustomInstructionManager(settings.custom_instructions_path)
 
     def _build_system(self, ctx: AgentContext) -> str:
         parts = [BASE_PERSONA, "\n\n---\n\n", self._agent_prompt]
+        custom = self._custom_instructions.load()
+        if custom.get("global"):
+            parts.append(
+                f"\n\n## User custom instructions for all functions\n\n{custom['global']}"
+            )
+        if custom.get(self.intent):
+            parts.append(
+                f"\n\n## User custom instructions for {self.intent}\n\n{custom[self.intent]}"
+            )
         if ctx.identity:
             parts.append(f"\n\n## Your memory — who this person is\n\n{ctx.identity}")
         if ctx.campaign:
