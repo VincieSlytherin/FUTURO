@@ -1,5 +1,4 @@
 import json
-import logging
 import uuid
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -9,7 +8,6 @@ from app.deps import AuthDep, MemoryDep
 from app.models.schemas import ChatRequest
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
-logger = logging.getLogger(__name__)
 
 
 async def _event_stream(body: ChatRequest, memory):
@@ -34,26 +32,17 @@ async def _event_stream(body: ChatRequest, memory):
 
     # 5. Post-process: propose memory updates
     complete_response = "".join(full_response)
-    updates = await agent.post_process(complete_response, body.message, ctx)
-    applied_updates = []
-    for update in updates:
-        try:
-            memory.apply_update(
-                filename=update.file,
-                section=update.section,
-                action=update.action,
-                content=update.content,
-                reason=update.reason,
-            )
-            applied_updates.append(update.model_copy(update={"applied": True}))
-        except Exception as exc:
-            logger.warning("Failed to apply memory update for %s: %s", update.file, exc)
-            applied_updates.append(update.model_copy(update={"applied": False}))
+    updates = await agent.post_process(
+        complete_response,
+        body.message,
+        ctx,
+        history=history,
+    )
 
     payload = {
         "intent": intent,
         "session_id": session_id,
-        "proposed_updates": [u.model_dump() for u in applied_updates],
+        "proposed_updates": [u.model_dump() for u in updates],
     }
     yield f"event: complete\ndata: {json.dumps(payload)}\n\n"
 

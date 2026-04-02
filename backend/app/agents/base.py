@@ -65,7 +65,7 @@ MEMORY_TARGETS: dict[str, list[str]] = {
     ],
 }
 
-MEMORY_EXTRACTION_SYSTEM = """You extract durable user memory from a single Futuro chat turn.
+MEMORY_EXTRACTION_SYSTEM = """You extract durable user memory from a Futuro chat session.
 
 Return only strict JSON. No markdown fences. No commentary.
 
@@ -85,10 +85,16 @@ Rules:
 - Do not store generic chit-chat, temporary pleasantries, or assistant-authored suggestions unless the user clearly adopted them.
 - Prefer concise markdown snippets.
 - Preserve concrete resume facts: role names, skills, stacks, quantified achievements, and target roles.
+- Prefer saving newly stated user preferences, constraints, and priorities so L1 needs little manual upkeep.
+- Capture new company or pipeline changes when the user mentions applying, interviewing, waiting, rejecting, or prioritizing a company.
+- Capture interview outcomes, patterns, and lessons when the user debriefs an interview.
+- Capture newly claimed technical skills, tools, or domains when the user says they have them or used them.
 - When the user pastes resume content, prefer storing it in "resume_versions.md" under "Bullets".
 - When the user shares personal background, role target, skills, or signature projects, store it in "L0_identity.md".
 - When the user shares ongoing search status or priorities, store it in "L1_campaign.md".
+- When the user shares company-specific next steps, blockers, or search preferences, prefer "L1_campaign.md".
 - When the user shares reusable strategy or market learnings, store it in "L2_knowledge.md".
+- When the user shares interview outcomes, recurring question patterns, or weak spots, prefer "interview_log.md".
 - Avoid duplicating facts already present in memory.
 - Use only these files and sections:
   - L0_identity.md: Who I am, Career narrative, Target role, Technical skills, Signature projects
@@ -149,14 +155,18 @@ class BaseAgent:
             yield token
 
     async def post_process(
-        self, response: str, message: str, ctx: AgentContext
+        self,
+        response: str,
+        message: str,
+        ctx: AgentContext,
+        history: list[dict] | None = None,
     ) -> list[MemoryUpdate]:
         if self._looks_like_resume_payload(message):
             resume_updates = self._extract_resume_memory_updates(message)
             if resume_updates:
                 return resume_updates
         story_updates = self._extract_story_bank_updates(message, response, ctx)
-        memory_updates = await self._extract_memory_updates(response, message, ctx)
+        memory_updates = await self._extract_memory_updates(response, message, ctx, history=history)
         return self._merge_updates(story_updates + memory_updates)
 
     async def _extract_memory_updates(
@@ -164,8 +174,10 @@ class BaseAgent:
         response: str,
         message: str,
         ctx: AgentContext,
+        history: list[dict] | None = None,
     ) -> list[MemoryUpdate]:
-        if not self._should_extract_memory(message):
+        session_transcript = self._build_session_transcript(history or [], message, response)
+        if not self._should_extract_memory(session_transcript):
             return []
 
         try:
@@ -183,8 +195,7 @@ class BaseAgent:
         ]))
         user_turn = (
             f"Intent: {self.intent}\n\n"
-            f"User message:\n{message.strip()}\n\n"
-            f"Assistant response:\n{response.strip()}\n\n"
+            f"Session transcript:\n{session_transcript}\n\n"
             f"Existing memory snapshot:\n{existing_memory or '[empty]'}"
         )
 
@@ -199,6 +210,32 @@ class BaseAgent:
 
         parsed = self._parse_memory_updates(raw)
         return parsed or self._fallback_memory_updates(message)
+
+    def _build_session_transcript(
+        self,
+        history: list[dict],
+        message: str,
+        response: str,
+    ) -> str:
+        trimmed_history = list(history[-8:])
+        if (
+            trimmed_history
+            and trimmed_history[-1].get("role") == "user"
+            and trimmed_history[-1].get("content", "").strip() == message.strip()
+        ):
+            trimmed_history = trimmed_history[:-1]
+
+        lines: list[str] = []
+        for turn in trimmed_history:
+            role = str(turn.get("role", "user")).strip().upper() or "USER"
+            content = str(turn.get("content", "")).strip()
+            if content:
+                lines.append(f"{role}: {content}")
+        if message.strip():
+            lines.append(f"USER: {message.strip()}")
+        if response.strip():
+            lines.append(f"ASSISTANT: {response.strip()}")
+        return "\n\n".join(lines)
 
     def _parse_memory_updates(self, raw: str) -> list[MemoryUpdate]:
         raw = raw.strip()
@@ -253,8 +290,8 @@ class BaseAgent:
             return False
         return True
 
-    def _should_extract_memory(self, message: str) -> bool:
-        cleaned = message.strip()
+    def _should_extract_memory(self, transcript: str) -> bool:
+        cleaned = transcript.strip()
         if len(cleaned) >= 80:
             return True
         lowered = cleaned.lower()
@@ -270,6 +307,14 @@ class BaseAgent:
             "interview",
             "job search",
             "remember this",
+            "applied",
+            "screen",
+            "onsite",
+            "offer",
+            "prefer",
+            "looking for",
+            "avoid",
+            "learned",
         ]
         return any(keyword in lowered for keyword in keywords)
 
@@ -846,8 +891,8 @@ class ResumeEditorAgent(BaseAgent):
 class BQCoachAgent(BaseAgent):
     intent = "BQ"; prompt_name = "bq_coach"
 
-    async def post_process(self, response, message, ctx):
-        return await super().post_process(response, message, ctx)
+    async def post_process(self, response, message, ctx, history=None):
+        return await super().post_process(response, message, ctx, history=history)
 
 class DebriefAgent(BaseAgent):
     intent = "DEBRIEF"; prompt_name = "debrief_agent"

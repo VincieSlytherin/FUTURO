@@ -466,12 +466,16 @@ def test_memory_manager_appends_to_subheading():
 
 
 @pytest.mark.asyncio
-async def test_chat_auto_applies_memory_updates(auth_client):
+async def test_chat_returns_memory_proposals_without_auto_applying(auth_client, tmp_path, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "memory_dir", tmp_path / "memory")
+
     class FakeAgent:
         async def stream(self, message, history, ctx):
             yield "Thanks, I saved that."
 
-        async def post_process(self, response, message, ctx):
+        async def post_process(self, response, message, ctx, history=None):
             return [
                 MemoryUpdate(
                     file="resume_versions.md",
@@ -492,11 +496,55 @@ async def test_chat_auto_applies_memory_updates(auth_client):
         })
 
     assert resp.status_code == 200
-    assert '"applied": true' in resp.text.lower()
+    assert '"proposed_updates"' in resp.text
+    assert '"applied": false' in resp.text.lower()
 
     resume = await auth_client.get("/api/memory/resume_versions.md")
     assert resume.status_code == 200
-    assert "Built production RAG pipelines and evaluation workflows" in resume.json()["content"]
+    assert "Built production RAG pipelines and evaluation workflows" not in resume.json()["content"]
+
+
+@pytest.mark.asyncio
+async def test_post_process_uses_session_transcript_for_memory_extraction():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+    from unittest.mock import AsyncMock
+    from app.memory.manager import MemoryManager
+    from app.agents.base import StrategyReviewAgent
+
+    captured = {}
+
+    class FakeProvider:
+        async def complete(self, system, messages, max_tokens):
+            captured["system"] = system
+            captured["messages"] = messages
+            return "[]"
+
+    with TemporaryDirectory() as tmp:
+        memory = MemoryManager(Path(tmp), git_auto_commit=False)
+        agent = StrategyReviewAgent(memory)
+        ctx = memory.load_context("STRATEGY")
+        history = [
+            {"role": "user", "content": "I'm prioritizing applied AI roles in healthcare and fintech."},
+            {"role": "assistant", "content": "Noted. What matters most in the next few weeks?"},
+        ]
+        with (
+            patch("app.agents.base.get_provider", return_value=FakeProvider()),
+            patch.object(StrategyReviewAgent, "_extract_story_bank_updates", return_value=[]),
+        ):
+            updates = await agent.post_process(
+                "We should focus on high-signal teams next.",
+                "I also want remote-friendly teams and I want to avoid ad-tech.",
+                ctx,
+                history=history,
+            )
+
+    assert all(update.file != "stories_bank.md" for update in updates)
+    transcript = captured["messages"][0]["content"]
+    assert "Session transcript:" in transcript
+    assert "USER: I'm prioritizing applied AI roles in healthcare and fintech." in transcript
+    assert "USER: I also want remote-friendly teams and I want to avoid ad-tech." in transcript
+    assert "ASSISTANT: We should focus on high-signal teams next." in transcript
 
 
 @pytest.mark.asyncio
