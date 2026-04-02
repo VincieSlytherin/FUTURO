@@ -737,6 +737,58 @@ def test_weekly_digest_text_includes_planner_sections():
     assert "- [ ] Review system design for retrieval pipelines" in text
 
 
+@pytest.mark.asyncio
+async def test_weekly_digest_encouragement_uses_llm(monkeypatch, tmp_path):
+    from app.notifications import EmailNotificationService
+
+    provider = AsyncMock()
+    provider.complete = AsyncMock(return_value="You created real momentum this week, so narrow your attention to the strongest roles and close the loop on the open tasks.")
+    monkeypatch.setattr("app.notifications.get_provider", lambda task: provider)
+
+    service = EmailNotificationService(memory=None)
+    digest = {
+        "generated_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+        "top_jobs": [{"company": "OpenAI", "title": "Applied AI Engineer", "score": 92}],
+        "current_stage_counts": {"APPLIED": 3},
+        "previous_stage_counts": {"APPLIED": 1},
+        "applied_this_week": 2,
+        "weekly_focus": "- Finish top two applications",
+        "daily_tasks": [{"done": False, "text": "Tailor resume"}],
+        "learning_backlog": [{"done": False, "text": "Review evals"}],
+    }
+
+    line = await service._generate_encouragement(digest)
+
+    assert line.startswith("You created real momentum this week")
+    provider.complete.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_weekly_digest_encouragement_falls_back_without_provider(monkeypatch):
+    from app.notifications import EmailNotificationService
+
+    def boom(_task):
+        raise RuntimeError("provider unavailable")
+
+    monkeypatch.setattr("app.notifications.get_provider", boom)
+    service = EmailNotificationService(memory=None)
+    digest = {
+        "generated_at": __import__("datetime").datetime(2026, 4, 2, tzinfo=__import__("datetime").timezone.utc),
+        "top_jobs": [],
+        "current_stage_counts": {},
+        "previous_stage_counts": {},
+        "applied_this_week": 0,
+        "weekly_focus": "",
+        "daily_tasks": [],
+        "learning_backlog": [],
+    }
+
+    line = await service._generate_encouragement(digest)
+
+    assert isinstance(line, str)
+    assert len(line) > 10
+
+
 def test_memory_manager_migrates_legacy_planner_sections(tmp_path):
     from app.memory.manager import MemoryManager
 

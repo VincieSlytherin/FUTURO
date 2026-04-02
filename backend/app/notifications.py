@@ -13,6 +13,8 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.memory.manager import MemoryManager
 from app.models.db import Company, CompanyEvent, JobListing
+from app.providers.base import TaskType
+from app.providers.router import get_provider
 
 
 def notifications_enabled(email: str | None = None, password: str | None = None) -> bool:
@@ -52,6 +54,19 @@ def _encouragement_line(now: datetime) -> str:
         "The goal is not to do everything. It is to keep moving the highest-fit opportunities forward.",
     ]
     return options[now.isocalendar().week % len(options)]
+
+
+ENCOURAGEMENT_SYSTEM = """You write one short encouragement line for a weekly job search digest.
+
+Rules:
+- Use the user's actual weekly situation, not generic motivation.
+- Mention momentum, focus, recovery, or restraint only if it matches the data.
+- Sound warm, grounded, and specific.
+- Keep it to one sentence, max 28 words.
+- No emojis.
+- No exclamation marks.
+- Do not mention raw JSON.
+Return only the sentence."""
 
 
 def _section_body(markdown_section: str, header: str) -> str:
@@ -304,7 +319,7 @@ class EmailNotificationService:
         daily_tasks = _parse_checklist_items(_section_body(daily_tasks_md, "Daily tasks"))
         learning_backlog = _parse_checklist_items(_section_body(learning_backlog_md, "Learning backlog"))
 
-        return {
+        digest = {
             "generated_at": now,
             "top_jobs": [
                 {
@@ -328,8 +343,57 @@ class EmailNotificationService:
             "weekly_focus": weekly_focus,
             "daily_tasks": daily_tasks,
             "learning_backlog": learning_backlog,
-            "encouragement": _encouragement_line(now),
+            "encouragement": "",
         }
+        digest["encouragement"] = await self._generate_encouragement(digest)
+        return digest
+
+    async def _generate_encouragement(self, digest: dict[str, Any]) -> str:
+        fallback = _encouragement_line(digest["generated_at"])
+        prompt = self._encouragement_prompt(digest)
+        try:
+            provider = get_provider(TaskType.CHAT)
+            text = await provider.complete(
+                system=ENCOURAGEMENT_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=80,
+            )
+        except Exception:
+            return fallback
+
+        cleaned = " ".join((text or "").strip().split())
+        if not cleaned:
+            return fallback
+        cleaned = cleaned.replace("!", ".")
+        return cleaned[:220].strip()
+
+    def _encouragement_prompt(self, digest: dict[str, Any]) -> str:
+        top_jobs = digest.get("top_jobs", [])
+        scored_jobs = ", ".join(
+            f"{job.get('company')} {job.get('title')} ({job.get('score')}/100)"
+            for job in top_jobs[:3]
+        ) or "No 70+ score roles this week."
+        open_tasks = sum(1 for item in digest.get("daily_tasks", []) if not item.get("done"))
+        done_tasks = sum(1 for item in digest.get("daily_tasks", []) if item.get("done"))
+        learning_open = sum(1 for item in digest.get("learning_backlog", []) if not item.get("done"))
+        pipeline_bits = []
+        current_counts = digest.get("current_stage_counts", {})
+        previous_counts = digest.get("previous_stage_counts", {})
+        for stage, count in sorted(current_counts.items()):
+            delta = count - previous_counts.get(stage, 0)
+            pipeline_bits.append(f"{stage}: {count} ({delta:+d} vs last week)")
+        pipeline_summary = ", ".join(pipeline_bits) or "No pipeline data yet."
+        weekly_focus = digest.get("weekly_focus") or "No weekly focus written."
+        return (
+            "Write one encouragement line for this weekly digest.\n\n"
+            f"Applications sent this week: {digest.get('applied_this_week', 0)}\n"
+            f"Top jobs: {scored_jobs}\n"
+            f"Pipeline movement: {pipeline_summary}\n"
+            f"Open daily tasks: {open_tasks}\n"
+            f"Completed daily tasks: {done_tasks}\n"
+            f"Open learning items: {learning_open}\n"
+            f"Weekly focus: {weekly_focus}\n"
+        )
 
     def _build_scout_email_html(
         self,
@@ -383,10 +447,10 @@ class EmailNotificationService:
         <html>
           <body style="margin:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;">
             <div style="max-width:760px;margin:0 auto;padding:32px 20px;">
-              <div style="background:linear-gradient(135deg,#111827,#1f2937);border-radius:24px;padding:28px;color:#ffffff;">
-                <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.8;margin:0 0 10px 0;">Futuro Scout</div>
-                <h1 style="margin:0 0 10px 0;font-size:28px;line-height:1.15;">{html.escape(config_name)} finished</h1>
-                <p style="margin:0;font-size:15px;line-height:1.6;opacity:0.9;">{html.escape(banner)} Search: {html.escape(search_term)} in {html.escape(location)}. Threshold: {min_score}+.</p>
+              <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-radius:24px;padding:28px;">
+                <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#1d4ed8;font-weight:800;margin:0 0 10px 0;">Futuro Scout</div>
+                <h1 style="margin:0 0 10px 0;font-size:28px;line-height:1.15;color:#0f172a;">{html.escape(config_name)} finished</h1>
+                <p style="margin:0;font-size:15px;line-height:1.6;color:#1e293b;">{html.escape(banner)} Search: {html.escape(search_term)} in {html.escape(location)}. Threshold: {min_score}+.</p>
               </div>
 
               <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0;">
@@ -485,10 +549,10 @@ class EmailNotificationService:
         <html>
           <body style="margin:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;">
             <div style="max-width:760px;margin:0 auto;padding:32px 20px;">
-              <div style="background:linear-gradient(135deg,#0f172a,#1d4ed8);border-radius:24px;padding:28px;color:#ffffff;">
-                <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.8;margin:0 0 10px 0;">Futuro Weekly Digest</div>
-                <h1 style="margin:0 0 10px 0;font-size:28px;line-height:1.15;">Your weekly job-search snapshot</h1>
-                <p style="margin:0;font-size:15px;line-height:1.6;opacity:0.9;">{html.escape('This is a test weekly digest.' if test_mode else 'Here is the latest picture of your pipeline, search momentum, and next focus.')}</p>
+              <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-radius:24px;padding:28px;">
+                <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#1d4ed8;font-weight:800;margin:0 0 10px 0;">Futuro Weekly Digest</div>
+                <h1 style="margin:0 0 10px 0;font-size:28px;line-height:1.15;color:#0f172a;">Your weekly job-search snapshot</h1>
+                <p style="margin:0;font-size:15px;line-height:1.6;color:#1e293b;">{html.escape('This is a test weekly digest.' if test_mode else 'Here is the latest picture of your pipeline, search momentum, and next focus.')}</p>
               </div>
 
               <div style="margin:22px 0 12px 0;font-size:18px;font-weight:700;color:#111827;">Top new high-score jobs</div>
