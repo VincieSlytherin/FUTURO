@@ -16,6 +16,7 @@ backend/data/memory/
 backend/data/chroma/
 backend/data/uploads/
 backend/data/portfolio/
+backend/data/custom_instructions.json
 backups/
 
 # Node
