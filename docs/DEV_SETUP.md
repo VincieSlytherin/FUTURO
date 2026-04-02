@@ -13,6 +13,7 @@ If you follow it top to bottom, you should be able to:
 - choose providers from the Settings UI
 - pull Ollama models with live progress
 - upload files or folders into the Portfolio vault
+- manage a memory-backed planner with daily tasks and learning backlog items
 
 ## Prerequisites
 
@@ -248,6 +249,10 @@ Important notes:
 - changes apply on the next request
 - you do not need to restart the backend after saving them
 
+Important note:
+
+- planner conversations currently reuse the existing strategy/general instruction flow unless you explicitly extend the settings schema with a planner-specific instruction field
+
 ## Portfolio document vault
 
 Futuro includes a `Portfolio` area for files you want to keep during the search.
@@ -269,6 +274,27 @@ Useful examples:
 - take-home assignments
 - interview prep packets
 - offer letters or recruiter docs
+
+## Planner memory and checklists
+
+Futuro includes a dedicated `Planner` page backed by `planner.md`.
+
+Current behavior:
+
+- `Daily tasks` stores concrete work items as markdown checkboxes
+- `Learning backlog` stores study or practice goals as markdown checkboxes
+- changes made in the Planner UI are written back into memory immediately
+- items can be added, edited, checked off, or deleted as your priorities change
+- chat reads `planner.md`, so planner items become part of the conversation context
+- the weekly digest email includes both sections
+
+Examples of good planner items:
+
+- tailor resume for one target role
+- send one recruiter follow-up
+- practice one BQ story
+- review one system design topic
+- study one gap from a target JD
 
 ## Pull Ollama models from the UI
 
@@ -366,6 +392,7 @@ Verify that:
 - Ollama health is visible in the provider status area
 - if `Auto (prefer Ollama)` is selected but the Ollama chat model is not pulled yet, Futuro temporarily falls back to Claude
 - the `Portfolio` page can upload a test PDF or Word file
+- the `Planner` page can save and toggle checklist items
 
 ## Shortcut commands
 
@@ -442,6 +469,16 @@ Check these first:
 - if you upload a folder, your browser supports folder selection well
 
 Uploaded portfolio files are stored locally in `backend/data/portfolio`.
+
+### Planner items do not show up in chat context
+
+Check these first:
+
+- the Planner page saved successfully
+- `planner.md` contains the checklist items you expect
+- you started a new chat turn after saving the planner update
+
+Planner data lives in `backend/data/memory/planner.md`, so it follows the same local memory rules as the rest of Futuro memory without getting mixed into campaign notes.
 
 ### Ollama requests fail
 

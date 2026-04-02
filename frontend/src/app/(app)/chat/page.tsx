@@ -131,6 +131,7 @@ export default function ChatPage() {
               {[
                 "Practice BQ questions",
                 "Review my search strategy",
+                "Help me plan this week",
                 "Help me tailor my resume",
                 "I just finished an interview",
               ].map((s) => (

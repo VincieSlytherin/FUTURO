@@ -9,6 +9,7 @@ import git
 MEMORY_FILES = [
     "L0_identity.md",
     "L1_campaign.md",
+    "planner.md",
     "L2_knowledge.md",
     "stories_bank.md",
     "resume_versions.md",
@@ -18,6 +19,7 @@ MEMORY_FILES = [
 STUBS = {
     "L0_identity.md": "# L0 · Core Identity\n> Fill this out or run onboarding.\n\n## Who I am\n\n## Career narrative\n\n## Target role\n\n## Technical skills\n\n## Signature projects\n",
     "L1_campaign.md": "# L1 · Campaign State\n> Updated every session.\n\n## Status snapshot\n\n| Metric | Value |\n|---|---|\n| Active applications | 0 |\n\n## Weekly focus\n\n## Mindset check\n\n## Strategy notes\n",
+    "planner.md": "# Planner\n> Living checklist memory for tasks, learning goals, and things to forget or add over time.\n\n## Daily tasks\n\n- [ ] No daily tasks yet.\n\n## Learning backlog\n\n- [ ] No learning items yet.\n",
     "L2_knowledge.md": "# L2 · Knowledge Base\n> Grows as you learn.\n\n## Job search strategy\n\n## Sourcing channels\n\n## Market intelligence\n\n## Interview prep learnings\n\n## Insights from content\n\n## Strategy iteration log\n",
     "stories_bank.md": "# Stories Bank\n\n## Quick-reference index\n\n| Theme | Stories |\n|---|---|\n\n## Coverage gaps\n\n- None yet.\n\n",
     "resume_versions.md": "# Resume Versions\n\n## Current version: v1.0\n\n**Created:** [DATE]\n**Status:** Active\n\n### Bullets\n\n",
@@ -29,6 +31,7 @@ STUBS = {
 class AgentContext:
     identity: str = ""
     campaign: str = ""
+    planner: str = ""
     knowledge_section: str = ""
     stories: str = ""
     resume: str = ""
@@ -52,9 +55,14 @@ class MemoryManager:
             repo.config_writer().set_value("user", "name", "Futuro").release()
             repo.config_writer().set_value("user", "email", "futuro@local").release()
         for filename, stub in STUBS.items():
+            if filename == "planner.md":
+                continue
             path = self.memory_dir / filename
             if not path.exists():
                 path.write_text(stub, encoding="utf-8")
+        planner_path = self.memory_dir / "planner.md"
+        if not planner_path.exists():
+            planner_path.write_text(self._initial_planner_content(), encoding="utf-8")
         self._initial_commit()
 
     def _initial_commit(self) -> None:
@@ -116,6 +124,7 @@ class MemoryManager:
         ctx = AgentContext(
             identity=self.read("L0_identity.md"),
             campaign=self.read("L1_campaign.md"),
+            planner=self.read("planner.md"),
         )
         if agent_type in ("BQ", "STORY", "DEBRIEF"):
             ctx.stories = self.read("stories_bank.md")
@@ -126,6 +135,40 @@ class MemoryManager:
         if agent_type == "DEBRIEF":
             ctx.interview_log = self.read("interview_log.md")
         return ctx
+
+    def _initial_planner_content(self) -> str:
+        campaign_path = self.memory_dir / "L1_campaign.md"
+        if not campaign_path.exists():
+            return STUBS["planner.md"]
+
+        campaign = campaign_path.read_text(encoding="utf-8")
+        daily_tasks = self._extract_section_from_text(campaign, "Daily tasks")
+        learning_backlog = self._extract_section_from_text(campaign, "Learning backlog")
+        if not daily_tasks and not learning_backlog:
+            return STUBS["planner.md"]
+
+        daily_body = self._section_body(daily_tasks, "Daily tasks") or "- [ ] No daily tasks yet."
+        learning_body = self._section_body(learning_backlog, "Learning backlog") or "- [ ] No learning items yet."
+        return (
+            "# Planner\n"
+            "> Living checklist memory for tasks, learning goals, and things to forget or add over time.\n\n"
+            "## Daily tasks\n\n"
+            f"{daily_body.strip()}\n\n"
+            "## Learning backlog\n\n"
+            f"{learning_body.strip()}\n"
+        )
+
+    def _extract_section_from_text(self, content: str, section_header: str) -> str:
+        pattern = rf"(^## {re.escape(section_header)}.*?)(?=^## |\Z)"
+        match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+        return match.group(1).strip() if match else ""
+
+    def _section_body(self, section_text: str, section_header: str) -> str:
+        prefix = f"## {section_header}"
+        body = section_text.strip()
+        if body.startswith(prefix):
+            body = body[len(prefix):].strip()
+        return body.strip()
 
     # ── Writing ───────────────────────────────────────────────────────────────
 

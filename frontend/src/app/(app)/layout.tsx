@@ -6,7 +6,7 @@ import Link from "next/link";
 import { isLoggedIn, logout } from "@/lib/api";
 import {
   MessageSquare, SquareKanban, BookOpen,
-  FileText, Calendar, Brain, LogOut, Briefcase, Settings, FolderOpen,
+  FileText, Calendar, Brain, LogOut, Briefcase, Settings, FolderOpen, ListTodo,
 } from "lucide-react";
 import clsx from "clsx";
 import ProviderStatus from "@/components/shared/ProviderStatus";
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/campaign",   label: "Company",    icon: SquareKanban  },
   { href: "/stories",    label: "Stories",    icon: BookOpen      },
   { href: "/resume",     label: "Resume",     icon: FileText      },
+  { href: "/planner",    label: "Planner",    icon: ListTodo      },
   { href: "/portfolio",  label: "Portfolio",  icon: FolderOpen    },
   { href: "/interviews", label: "Interviews", icon: Calendar      },
   { href: "/memory",     label: "Memory",     icon: Brain         },

@@ -41,6 +41,10 @@ MEMORY_TARGETS: dict[str, list[str]] = {
         "Mindset check",
         "Strategy notes",
     ],
+    "planner.md": [
+        "Daily tasks",
+        "Learning backlog",
+    ],
     "L2_knowledge.md": [
         "Job search strategy",
         "Sourcing channels",
@@ -89,16 +93,21 @@ Rules:
 - Capture new company or pipeline changes when the user mentions applying, interviewing, waiting, rejecting, or prioritizing a company.
 - Capture interview outcomes, patterns, and lessons when the user debriefs an interview.
 - Capture newly claimed technical skills, tools, or domains when the user says they have them or used them.
+- Capture concrete daily tasks and learning goals when the user is planning their week or saying what they want to study next.
+- Prefer using planner.md for living checklists that can be updated, forgotten, edited, or reordered over time.
 - When the user pastes resume content, prefer storing it in "resume_versions.md" under "Bullets".
 - When the user shares personal background, role target, skills, or signature projects, store it in "L0_identity.md".
 - When the user shares ongoing search status or priorities, store it in "L1_campaign.md".
 - When the user shares company-specific next steps, blockers, or search preferences, prefer "L1_campaign.md".
+- When the user shares a concrete action item for today or this week, prefer "planner.md" under "Daily tasks".
+- When the user shares something they want to learn, practice, or review, prefer "planner.md" under "Learning backlog".
 - When the user shares reusable strategy or market learnings, store it in "L2_knowledge.md".
 - When the user shares interview outcomes, recurring question patterns, or weak spots, prefer "interview_log.md".
 - Avoid duplicating facts already present in memory.
 - Use only these files and sections:
   - L0_identity.md: Who I am, Career narrative, Target role, Technical skills, Signature projects
   - L1_campaign.md: Status snapshot, Weekly focus, Mindset check, Strategy notes
+  - planner.md: Daily tasks, Learning backlog
   - L2_knowledge.md: Job search strategy, Sourcing channels, Market intelligence, Interview prep learnings, Insights from content, Strategy iteration log
   - stories_bank.md: Quick-reference index
   - resume_versions.md: Current version: v1.0, Bullets
@@ -132,6 +141,8 @@ class BaseAgent:
             parts.append(f"\n\n## Your memory — who this person is\n\n{ctx.identity}")
         if ctx.campaign:
             parts.append(f"\n\n## Their current search state\n\n{ctx.campaign}")
+        if ctx.planner:
+            parts.append(f"\n\n## Their living planner\n\n{ctx.planner}")
         if ctx.stories:
             parts.append(f"\n\n## Their story bank\n\n{ctx.stories}")
         if ctx.resume:
@@ -188,6 +199,7 @@ class BaseAgent:
         existing_memory = "\n\n".join(filter(None, [
             f"[L0_identity.md]\n{ctx.identity[:1600]}",
             f"[L1_campaign.md]\n{ctx.campaign[:1200]}",
+            f"[planner.md]\n{ctx.planner[:1200]}",
             f"[resume_versions.md]\n{ctx.resume[:1600]}",
             f"[stories_bank.md]\n{ctx.stories[:1200]}",
             f"[interview_log.md]\n{ctx.interview_log[:1200]}",
@@ -307,6 +319,14 @@ class BaseAgent:
             "interview",
             "job search",
             "remember this",
+            "task",
+            "todo",
+            "to-do",
+            "today",
+            "this week",
+            "checklist",
+            "learn",
+            "study",
             "applied",
             "screen",
             "onsite",
@@ -900,6 +920,9 @@ class DebriefAgent(BaseAgent):
 class StrategyReviewAgent(BaseAgent):
     intent = "STRATEGY"; prompt_name = "strategy_agent"
 
+class PlannerAgent(BaseAgent):
+    intent = "PLANNER"; prompt_name = "planner_agent"
+
 class JobScoutAgent(BaseAgent):
     intent = "SCOUT"; prompt_name = "job_scout"
 
@@ -907,7 +930,7 @@ class JobScoutAgent(BaseAgent):
 AGENT_MAP: dict[str, type[BaseAgent]] = {
     "GENERAL": CoreAgent, "INTAKE": IntakeAgent, "STORY": StoryBuilderAgent,
     "RESUME": ResumeEditorAgent, "BQ": BQCoachAgent, "DEBRIEF": DebriefAgent,
-    "STRATEGY": StrategyReviewAgent, "SCOUT": JobScoutAgent,
+    "STRATEGY": StrategyReviewAgent, "PLANNER": PlannerAgent, "SCOUT": JobScoutAgent,
 }
 
 INTENT_SYSTEM = """You are a routing classifier for Futuro, a job search assistant.
@@ -918,6 +941,7 @@ Classify the user message into exactly one intent:
 - BQ: user wants behavioral interview question practice or coaching
 - DEBRIEF: user has just finished an interview and wants to debrief
 - STRATEGY: user wants to review or update their overall job search strategy
+- PLANNER: user wants to plan their week, manage tasks, organize a checklist, or track what to learn next
 - SCOUT: user asks about job listings, the job scanner, new openings, or wants to find jobs
 - GENERAL: greetings, check-ins, questions, emotional support, anything else
 Reply with exactly one word from the list above. Nothing else."""

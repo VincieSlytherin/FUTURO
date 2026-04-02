@@ -85,6 +85,44 @@ def _html_escape_lines(text: str) -> str:
     return paragraphs
 
 
+def _parse_checklist_items(text: str) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        match = None
+        if line.startswith("- [ ] "):
+            match = (False, line[6:].strip())
+        elif line.startswith("- [x] ") or line.startswith("- [X] "):
+            match = (True, line[6:].strip())
+        if match and match[1]:
+            items.append({"done": match[0], "text": match[1]})
+    return items
+
+
+def _html_checklist(items: list[dict[str, Any]], empty_text: str) -> str:
+    if not items:
+        return f"<p style='margin:0;color:#6b7280;'>{html.escape(empty_text)}</p>"
+
+    rows = []
+    for item in items:
+        icon = "☑" if item["done"] else "☐"
+        color = "#6b7280" if item["done"] else "#111827"
+        decoration = "line-through" if item["done"] else "none"
+        rows.append(
+            f"<li style='margin:0 0 8px 0;color:{color};text-decoration:{decoration};'>{icon} {html.escape(item['text'])}</li>"
+        )
+    return f"<ul style='margin:0;padding-left:18px;'>{''.join(rows)}</ul>"
+
+
+def _text_checklist(items: list[dict[str, Any]], empty_text: str) -> list[str]:
+    if not items:
+        return [empty_text]
+    return [
+        f"- [{'x' if item['done'] else ' '}] {item['text']}"
+        for item in items
+    ]
+
+
 class EmailNotificationService:
     def __init__(self, memory: MemoryManager | None = None):
         self.memory = memory or MemoryManager(settings.memory_dir, git_auto_commit=False)
@@ -261,6 +299,10 @@ class EmailNotificationService:
 
         focus_md = self.memory.read_section("L1_campaign.md", "Weekly focus")
         weekly_focus = _section_body(focus_md, "Weekly focus")
+        daily_tasks_md = self.memory.read_section("planner.md", "Daily tasks")
+        learning_backlog_md = self.memory.read_section("planner.md", "Learning backlog")
+        daily_tasks = _parse_checklist_items(_section_body(daily_tasks_md, "Daily tasks"))
+        learning_backlog = _parse_checklist_items(_section_body(learning_backlog_md, "Learning backlog"))
 
         return {
             "generated_at": now,
@@ -284,6 +326,8 @@ class EmailNotificationService:
             "previous_stage_counts": previous_counts,
             "applied_this_week": applied_this_week,
             "weekly_focus": weekly_focus,
+            "daily_tasks": daily_tasks,
+            "learning_backlog": learning_backlog,
             "encouragement": _encouragement_line(now),
         }
 
@@ -470,6 +514,17 @@ class EmailNotificationService:
               <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:18px;padding:18px;">
                 {_html_escape_lines(digest['weekly_focus'])}
               </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;">
+                <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:18px;padding:18px;">
+                  <div style="font-size:12px;color:#6b7280;margin:0 0 10px 0;">Daily tasks</div>
+                  {_html_checklist(digest['daily_tasks'], 'No daily tasks saved yet.')}
+                </div>
+                <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:18px;padding:18px;">
+                  <div style="font-size:12px;color:#6b7280;margin:0 0 10px 0;">Learning backlog</div>
+                  {_html_checklist(digest['learning_backlog'], 'No learning backlog saved yet.')}
+                </div>
+              </div>
             </div>
           </body>
         </html>
@@ -503,6 +558,12 @@ class EmailNotificationService:
             "",
             "Next week's focus:",
             digest["weekly_focus"] or "No weekly focus saved yet.",
+            "",
+            "Daily tasks:",
+            *_text_checklist(digest["daily_tasks"], "No daily tasks saved yet."),
+            "",
+            "Learning backlog:",
+            *_text_checklist(digest["learning_backlog"], "No learning backlog saved yet."),
             "",
             digest["encouragement"],
         ])

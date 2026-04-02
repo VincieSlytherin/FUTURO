@@ -9,6 +9,7 @@ import clsx from "clsx";
 const FILES = [
   { key: "L0_identity.md",     label: "L0 Identity",    desc: "Who you are — stable" },
   { key: "L1_campaign.md",     label: "L1 Campaign",    desc: "Current search — updated each session" },
+  { key: "planner.md",         label: "Planner",        desc: "Living tasks + learning checklist" },
   { key: "L2_knowledge.md",    label: "L2 Knowledge",   desc: "Strategy + learnings" },
   { key: "stories_bank.md",    label: "Stories",        desc: "STAR story bank" },
   { key: "resume_versions.md", label: "Resume",         desc: "Version history + bullets" },

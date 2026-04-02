@@ -29,8 +29,9 @@ This README is written as a practical setup guide. If you follow it top to botto
 ## Main features
 
 - Persistent memory stored in Markdown and versioned with Git
-- AI chat with intent routing for intake, stories, resume help, BQ practice, debrief, strategy, and scouting
+- AI chat with intent routing for intake, stories, resume help, BQ practice, debrief, strategy, planning, and scouting
 - Company pipeline tracking
+- Planner with memory-backed daily tasks and learning backlog checklists
 - Story bank with structured STAR details and local vector search
 - Portfolio vault for resumes, offer docs, and other job-search PDFs/Word files
 - Interview log and review flow
@@ -268,6 +269,10 @@ You can add instructions for:
 - job scouting
 - intake
 
+Note:
+
+- planner chat currently reuses the strategy/general instruction buckets unless you add a dedicated planner field later
+
 Example:
 
 ```text
@@ -301,6 +306,27 @@ Good examples of what to store there:
 - take-home PDFs
 - interview prep packets
 - offer letters or recruiter docs
+
+## Planner and weekly checklist memory
+
+Futuro now includes a dedicated `Planner` area for lightweight execution tracking during the search.
+
+Current behavior:
+
+- `Planner` stores its checklist state in a dedicated `planner.md` memory file
+- `Daily tasks` is for concrete actions you want to finish this week
+- `Learning backlog` is for things you want to study, practice, or review
+- checklist items use markdown checkboxes, so they stay human-readable in memory
+- you can add, edit, check off, delete, forget, and reorder items over time by updating the checklist
+- chat can reference this planner memory automatically
+- the weekly digest email now includes both sections
+
+Examples:
+
+- `Tailor resume for Stripe`
+- `Follow up with recruiter at Anthropic`
+- `Review system design for retrieval pipelines`
+- `Practice one failure story out loud`
 
 ## Pull Ollama models from the UI
 
@@ -385,7 +411,8 @@ After both servers are running:
 5. Pull an Ollama model if needed
 6. Click `Apply`
 7. Optional: upload your job-search documents in `/portfolio`
-8. Optional: add custom instructions for BQ, Story, Resume, or Scout
+8. Optional: add tasks or learning goals in `/planner`
+9. Optional: add custom instructions for BQ, Story, Resume, or Scout
 
 If your selected Ollama model is not downloaded yet, Futuro may temporarily fall back to Claude when Claude is configured.
 
@@ -443,6 +470,7 @@ And in the app itself:
 
 - open `/settings`
 - open `/portfolio` and upload a test PDF or Word file
+- open `/planner` and add one daily task plus one learning item
 - confirm the `Provider preference` section shows the mode you selected
 - confirm `Provider health` and `Task routing` reflect the actual active provider
 

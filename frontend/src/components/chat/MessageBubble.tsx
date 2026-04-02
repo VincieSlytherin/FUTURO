@@ -19,6 +19,7 @@ const INTENT_LABELS: Record<string, string> = {
   INTAKE:   "Intake",
   DEBRIEF:  "Interview Debrief",
   STRATEGY: "Strategy Review",
+  PLANNER:  "Planner",
   GENERAL:  "",
 };
 

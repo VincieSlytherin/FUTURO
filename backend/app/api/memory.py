@@ -7,6 +7,7 @@ router = APIRouter(prefix="/api/memory", tags=["memory"])
 ALLOWED_FILES = [
     "L0_identity.md",
     "L1_campaign.md",
+    "planner.md",
     "L2_knowledge.md",
     "stories_bank.md",
     "resume_versions.md",

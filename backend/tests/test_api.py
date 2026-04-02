@@ -71,6 +71,7 @@ async def test_list_memory_files(auth_client):
     files = resp.json()["files"]
     filenames = [f["filename"] for f in files]
     assert "L0_identity.md" in filenames
+    assert "planner.md" in filenames
     assert "stories_bank.md" in filenames
 
 
@@ -704,3 +705,79 @@ def test_agent_build_system_includes_custom_instructions(tmp_path, monkeypatch):
 
     assert "Keep answers direct." in system
     assert "Always rate the answer first, then rewrite it in STAR." in system
+
+
+def test_weekly_digest_text_includes_planner_sections():
+    from app.notifications import EmailNotificationService
+
+    service = EmailNotificationService()
+    digest = {
+        "generated_at": None,
+        "top_jobs": [],
+        "current_stage_counts": {},
+        "previous_stage_counts": {},
+        "applied_this_week": 2,
+        "weekly_focus": "- Finish two tailored applications",
+        "daily_tasks": [
+            {"done": False, "text": "Tailor the Stripe resume"},
+            {"done": True, "text": "Send recruiter follow-up to Anthropic"},
+        ],
+        "learning_backlog": [
+            {"done": False, "text": "Review system design for retrieval pipelines"},
+        ],
+        "encouragement": "Keep going.",
+    }
+
+    text = service._build_weekly_digest_text(digest, test_mode=False)
+
+    assert "Daily tasks:" in text
+    assert "- [ ] Tailor the Stripe resume" in text
+    assert "- [x] Send recruiter follow-up to Anthropic" in text
+    assert "Learning backlog:" in text
+    assert "- [ ] Review system design for retrieval pipelines" in text
+
+
+def test_memory_manager_migrates_legacy_planner_sections(tmp_path):
+    from app.memory.manager import MemoryManager
+
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    (memory_dir / "L1_campaign.md").write_text(
+        "# L1 · Campaign State\n\n"
+        "## Weekly focus\n\n"
+        "- Ship applications\n\n"
+        "## Daily tasks\n\n"
+        "- [ ] Tailor resume for Stripe\n\n"
+        "## Learning backlog\n\n"
+        "- [ ] Review retrieval evaluation\n",
+        encoding="utf-8",
+    )
+
+    memory = MemoryManager(memory_dir, git_auto_commit=False)
+    planner = memory.read("planner.md")
+
+    assert "## Daily tasks" in planner
+    assert "- [ ] Tailor resume for Stripe" in planner
+    assert "## Learning backlog" in planner
+    assert "- [ ] Review retrieval evaluation" in planner
+
+
+def test_agent_build_system_includes_planner_context(tmp_path):
+    from app.memory.manager import MemoryManager
+    from app.agents.base import PlannerAgent
+
+    memory = MemoryManager(tmp_path / "memory", git_auto_commit=False)
+    memory.apply_update(
+        filename="planner.md",
+        section="Daily tasks",
+        action="replace",
+        content="- [ ] Finish one application",
+        reason="seed planner task",
+    )
+
+    agent = PlannerAgent(memory)
+    ctx = memory.load_context("PLANNER")
+    system = agent._build_system(ctx)
+
+    assert "## Their living planner" in system
+    assert "Finish one application" in system
