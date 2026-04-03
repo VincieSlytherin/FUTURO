@@ -13,6 +13,8 @@ backend/*.egg-info/
 
 # Data — not in main repo (memory has its own git repo)
 backend/data/futuro.db
+backend/data/futuro.db-shm
+backend/data/futuro.db-wal
 backend/data/memory/
 backend/data/chroma/
 backend/data/uploads/
