@@ -6,7 +6,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from app.config import PROJECT_ROOT, settings
@@ -15,10 +15,21 @@ from app.models.db import Base
 engine = create_async_engine(
     settings.db_url,
     echo=settings.debug,
-    connect_args={"check_same_thread": False},
+    connect_args={"check_same_thread": False, "timeout": 30},
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _configure_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
 
 
 def _sync_db_url(async_db_url: str) -> str:
@@ -76,7 +87,7 @@ def _run_migrations(db_url: str | None = None, db_path: Path | None = None) -> N
     if tables and current_revision is None:
         sync_engine = create_engine(
             _sync_db_url(target_db_url),
-            connect_args={"check_same_thread": False},
+            connect_args={"check_same_thread": False, "timeout": 30},
         )
         try:
             Base.metadata.create_all(sync_engine, checkfirst=True)

@@ -6,6 +6,7 @@ then uses Claude to score each listing against the user's L0 profile.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -15,26 +16,46 @@ from app.memory.manager import MemoryManager
 from app.notifications import EmailNotificationService, notifications_enabled
 from app.providers.base import TaskType
 from app.providers.router import get_provider
+from sqlalchemy.exc import OperationalError
 
 logger = logging.getLogger(__name__)
 _active_config_runs: set[int] = set()
+_scout_write_lock = asyncio.Lock()
 
 
 def is_config_running(config_id: int) -> bool:
     return config_id in _active_config_runs
 
 
+def _is_sqlite_locked(exc: Exception) -> bool:
+    return "database is locked" in str(exc).lower()
+
+
+async def _run_with_sqlite_retry(fn, *, attempts: int = 6, base_delay: float = 0.15):
+    for attempt in range(attempts):
+        try:
+            async with _scout_write_lock:
+                return await fn()
+        except OperationalError as exc:
+            if not _is_sqlite_locked(exc) or attempt == attempts - 1:
+                raise
+            await asyncio.sleep(base_delay * (attempt + 1))
+
+
 async def _update_run_progress(run_id: int, **fields) -> None:
     from app.database import AsyncSessionLocal
     from app.models.db import ScoutRun
 
-    async with AsyncSessionLocal() as db:
-        run = await db.get(ScoutRun, run_id)
-        if not run:
-            return
-        for field, value in fields.items():
-            setattr(run, field, value)
-        await db.commit()
+    async def _write():
+        async with AsyncSessionLocal() as db:
+            run = await db.get(ScoutRun, run_id)
+            if not run:
+                return
+            for field, value in fields.items():
+                setattr(run, field, value)
+            await db.commit()
+
+    await _run_with_sqlite_retry(_write)
 
 # ── Scraping ──────────────────────────────────────────────────────────────────
 
@@ -255,12 +276,16 @@ async def run_scout(
     try:
         # Create run record
         # 1. Scrape
-        async with AsyncSessionLocal() as db:
-            run = ScoutRun(config_id=config_id, status="RUNNING", started_at=datetime.now(timezone.utc))
-            db.add(run)
-            await db.commit()
-            await db.refresh(run)
-            run_id = run.id
+        async def _create_run():
+            nonlocal run_id
+            async with AsyncSessionLocal() as db:
+                run = ScoutRun(config_id=config_id, status="RUNNING", started_at=datetime.now(timezone.utc))
+                db.add(run)
+                await db.commit()
+                await db.refresh(run)
+                run_id = run.id
+
+        await _run_with_sqlite_retry(_create_run)
         await _update_run_progress(run_id, error_msg="Scraping job boards...")
 
         raw_jobs = _scrape_jobs(search_term, location, sites, results_wanted, hours_old, distance, is_remote)
@@ -354,22 +379,29 @@ async def run_scout(
 
         # 4. Persist
         await _update_run_progress(run_id, error_msg="Saving scored jobs...")
-        async with AsyncSessionLocal() as db:
-            for listing in listings_to_insert:
-                db.add(listing)
+        config_name_for_email = search_term
 
-            run = await db.get(ScoutRun, run_id)
-            run.status = "DONE"
-            run.finished_at = datetime.now(timezone.utc)
-            run.jobs_found = len(raw_jobs)
-            run.jobs_new = len(new_jobs)
-            run.jobs_scored = scored
+        async def _persist_results():
+            nonlocal config_name_for_email
+            async with AsyncSessionLocal() as db:
+                for listing in listings_to_insert:
+                    db.add(listing)
 
-            config = await db.get(ScoutConfig, config_id)
-            if config:
-                config.last_run_at = datetime.now(timezone.utc)
+                run = await db.get(ScoutRun, run_id)
+                run.status = "DONE"
+                run.finished_at = datetime.now(timezone.utc)
+                run.jobs_found = len(raw_jobs)
+                run.jobs_new = len(new_jobs)
+                run.jobs_scored = scored
 
-            await db.commit()
+                config = await db.get(ScoutConfig, config_id)
+                if config:
+                    config.last_run_at = datetime.now(timezone.utc)
+                    config_name_for_email = config.name
+
+                await db.commit()
+
+        await _run_with_sqlite_retry(_persist_results)
 
         high_score = [j for j in listings_to_insert if (j.score or 0) >= min_score]
         await _update_run_progress(
@@ -396,7 +428,7 @@ async def run_scout(
             ]
             try:
                 await EmailNotificationService(memory=memory).send_scout_run_summary(
-                    config_name=config.name if config else search_term,
+                    config_name=config_name_for_email,
                     search_term=search_term,
                     location=location,
                     min_score=min_score,
@@ -419,13 +451,16 @@ async def run_scout(
     except Exception as exc:
         logger.error(f"[scout:{config_id}] run failed: {exc}", exc_info=True)
         if run_id is not None:
-            async with AsyncSessionLocal() as db:
-                run = await db.get(ScoutRun, run_id)
-                if run:
-                    run.status = "ERROR"
-                    run.finished_at = datetime.now(timezone.utc)
-                    run.error_msg = str(exc)[:500]
-                    await db.commit()
+            async def _mark_error():
+                async with AsyncSessionLocal() as db:
+                    run = await db.get(ScoutRun, run_id)
+                    if run:
+                        run.status = "ERROR"
+                        run.finished_at = datetime.now(timezone.utc)
+                        run.error_msg = str(exc)[:500]
+                        await db.commit()
+
+            await _run_with_sqlite_retry(_mark_error)
         raise
     finally:
         _active_config_runs.discard(config_id)

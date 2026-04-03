@@ -4,6 +4,7 @@ import pytest_asyncio
 from uuid import uuid4
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, patch
+from sqlalchemy.exc import OperationalError
 
 # Patch settings before importing app
 import os
@@ -921,3 +922,25 @@ def test_resume_intent_requires_explicit_resume_edit_request():
     assert _resume_intent_is_explicit("Please review and tailor my resume for OpenAI.")
     assert not _resume_intent_is_explicit("I worked on RAG systems and multi-agent tooling at my last job.")
     assert not _resume_intent_is_explicit("I am not sure how to talk about my background in chat.")
+
+
+@pytest.mark.asyncio
+async def test_scout_sqlite_retry_recovers_from_locked_write(monkeypatch):
+    from app.agents.job_scout import _run_with_sqlite_retry
+
+    attempts = {"count": 0}
+
+    async def flaky_write():
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise OperationalError("UPDATE scout_runs", {}, Exception("database is locked"))
+        return "ok"
+
+    sleep_mock = AsyncMock()
+    monkeypatch.setattr("app.agents.job_scout.asyncio.sleep", sleep_mock)
+
+    result = await _run_with_sqlite_retry(flaky_write, attempts=3, base_delay=0)
+
+    assert result == "ok"
+    assert attempts["count"] == 2
+    assert sleep_mock.await_count == 1
