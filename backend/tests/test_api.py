@@ -607,6 +607,28 @@ async def test_emotional_general_chat_does_not_trigger_memory_extraction():
 
 
 @pytest.mark.asyncio
+async def test_general_chat_does_not_run_story_bank_extraction():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+    from app.memory.manager import MemoryManager
+    from app.agents.base import CoreAgent
+
+    with TemporaryDirectory() as tmp:
+        memory = MemoryManager(Path(tmp), git_auto_commit=False)
+        agent = CoreAgent(memory)
+        ctx = memory.load_context("GENERAL")
+        with patch.object(CoreAgent, "_extract_story_bank_updates", side_effect=AssertionError("story extraction should not run for general chat")):
+            updates = await agent.post_process(
+                "Burnout is real, and we can slow the pace down this week.",
+                "找工过程中太容易burn out了。",
+                ctx,
+                history=[],
+            )
+
+    assert updates == []
+
+
+@pytest.mark.asyncio
 async def test_resume_post_process_strips_formatting_and_extracts_content():
     from pathlib import Path
     from tempfile import TemporaryDirectory

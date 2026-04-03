@@ -176,7 +176,9 @@ class BaseAgent:
             resume_updates = self._extract_resume_memory_updates(message)
             if resume_updates:
                 return resume_updates
-        story_updates = self._extract_story_bank_updates(message, response, ctx)
+        story_updates = []
+        if self.intent in {"STORY", "BQ", "DEBRIEF"}:
+            story_updates = self._extract_story_bank_updates(message, response, ctx)
         memory_updates = await self._extract_memory_updates(response, message, ctx, history=history)
         return self._merge_updates(story_updates + memory_updates)
 
