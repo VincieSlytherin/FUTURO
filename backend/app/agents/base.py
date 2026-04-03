@@ -188,7 +188,7 @@ class BaseAgent:
         history: list[dict] | None = None,
     ) -> list[MemoryUpdate]:
         session_transcript = self._build_session_transcript(history or [], message, response)
-        if not self._should_extract_memory(session_transcript):
+        if not self._should_extract_memory(message, session_transcript):
             return []
 
         try:
@@ -302,41 +302,136 @@ class BaseAgent:
             return False
         return True
 
-    def _should_extract_memory(self, transcript: str) -> bool:
-        cleaned = transcript.strip()
-        if len(cleaned) >= 80:
+    def _should_extract_memory(self, message: str, transcript: str) -> bool:
+        lowered_message = message.strip().lower()
+        lowered_transcript = transcript.strip().lower()
+
+        if self._looks_like_resume_payload(message):
             return True
-        lowered = cleaned.lower()
-        keywords = [
-            "resume",
-            "cv",
-            "experience",
-            "worked at",
-            "i am",
-            "my background",
-            "skills",
-            "target role",
-            "interview",
-            "job search",
+
+        explicit_save_signals = [
             "remember this",
-            "task",
-            "todo",
-            "to-do",
-            "today",
-            "this week",
-            "checklist",
-            "learn",
-            "study",
+            "save this",
+            "save that",
+            "store this",
+            "add this to memory",
+            "update memory",
+            "log this",
+            "capture this",
+            "note this down",
+            "keep track of this",
+        ]
+        if any(signal in lowered_transcript for signal in explicit_save_signals):
+            return True
+
+        emotional_support_signals = [
+            "burn out",
+            "burnout",
+            "overwhelmed",
+            "stuck",
+            "anxious",
+            "anxiety",
+            "exhausted",
+            "tired",
+            "discouraged",
+            "demotivated",
+            "frustrated",
+            "worried",
+            "压力",
+            "焦虑",
+            "累",
+            "迷茫",
+            "崩溃",
+            "倦怠",
+            "疲惫",
+            "卡住",
+            "没动力",
+        ]
+        durable_override_signals = [
+            "remember",
+            "save",
+            "store",
+            "update",
             "applied",
-            "screen",
+            "screening",
             "onsite",
             "offer",
             "prefer",
-            "looking for",
             "avoid",
-            "learned",
+            "target role",
+            "task",
+            "todo",
+            "checklist",
+            "learn",
+            "study",
+            "记住",
+            "保存",
+            "更新",
+            "投了",
+            "面试",
+            "偏好",
+            "任务",
+            "待办",
+            "学习",
         ]
-        return any(keyword in lowered for keyword in keywords)
+        if any(signal in lowered_message for signal in emotional_support_signals) and not any(
+            signal in lowered_message for signal in durable_override_signals
+        ):
+            return False
+
+        if self.intent in {"RESUME", "BQ", "STORY", "DEBRIEF", "PLANNER", "INTAKE"}:
+            return len(lowered_message) >= 20
+
+        if self.intent == "STRATEGY":
+            strategy_signals = [
+                "target role",
+                "looking for",
+                "prefer",
+                "avoid",
+                "focus on",
+                "priorit",
+                "job search",
+                "next step",
+                "weekly focus",
+            ]
+            return any(signal in lowered_message for signal in strategy_signals)
+
+        if self.intent != "GENERAL":
+            return False
+
+        durable_general_signals = [
+            "i applied",
+            "i'm applying",
+            "i am applying",
+            "screening",
+            "onsite",
+            "offer",
+            "recruiter",
+            "withdrew",
+            "withdrew from",
+            "declined",
+            "accepted",
+            "target role",
+            "looking for",
+            "prefer",
+            "avoid",
+            "remote-friendly",
+            "sponsorship",
+            "visa",
+            "salary",
+            "task",
+            "todo",
+            "to-do",
+            "checklist",
+            "learning backlog",
+            "learn next",
+            "study next",
+            "practice next",
+            "interview went",
+            "interview question",
+            "my blind spot",
+        ]
+        return any(signal in lowered_message for signal in durable_general_signals)
 
     def _fallback_memory_updates(self, message: str) -> list[MemoryUpdate]:
         if not self._looks_like_resume_payload(message):
@@ -937,14 +1032,42 @@ INTENT_SYSTEM = """You are a routing classifier for Futuro, a job search assista
 Classify the user message into exactly one intent:
 - INTAKE: user shares a URL, file, article, or course to process
 - STORY: user wants to build, refine, or document a STAR story
-- RESUME: user wants to edit, tailor, or review their resume
+- RESUME: user explicitly wants to edit, tailor, rewrite, critique, or review their resume
 - BQ: user wants behavioral interview question practice or coaching
 - DEBRIEF: user has just finished an interview and wants to debrief
 - STRATEGY: user wants to review or update their overall job search strategy
 - PLANNER: user wants to plan their week, manage tasks, organize a checklist, or track what to learn next
 - SCOUT: user asks about job listings, the job scanner, new openings, or wants to find jobs
 - GENERAL: greetings, check-ins, questions, emotional support, anything else
+- If the user is chatting generally about their background, job search, projects, uncertainty, or next steps without explicitly asking for resume work, choose GENERAL.
+- Do not choose RESUME just because the user mentions experience, skills, or previous roles.
 Reply with exactly one word from the list above. Nothing else."""
+
+
+def _resume_intent_is_explicit(message: str) -> bool:
+    lowered = message.lower()
+    resume_terms = [
+        "resume",
+        "cv",
+    ]
+    action_terms = [
+        "edit",
+        "rewrite",
+        "revise",
+        "review",
+        "tailor",
+        "improve",
+        "fix",
+        "refine",
+        "update",
+        "redraft",
+        "polish",
+        "shorten",
+        "bullet",
+    ]
+    has_resume_term = any(term in lowered for term in resume_terms)
+    has_action_term = any(term in lowered for term in action_terms)
+    return has_resume_term and has_action_term
 
 
 async def classify_intent(message: str, history: list[dict]) -> str:
@@ -954,6 +1077,8 @@ async def classify_intent(message: str, history: list[dict]) -> str:
     text = await provider.complete(system=INTENT_SYSTEM, messages=msgs, max_tokens=10)
     token = text.strip().upper().split()[0] if text.strip() else "GENERAL"
     intent = re.sub(r"[^A-Z_]", "", token)
+    if intent == "RESUME" and not _resume_intent_is_explicit(message):
+        return "GENERAL"
     return intent if intent in AGENT_MAP else "GENERAL"
 
 

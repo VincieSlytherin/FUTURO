@@ -549,6 +549,64 @@ async def test_post_process_uses_session_transcript_for_memory_extraction():
 
 
 @pytest.mark.asyncio
+async def test_general_chat_does_not_always_trigger_memory_extraction():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+    from app.memory.manager import MemoryManager
+    from app.agents.base import CoreAgent
+
+    class FailingProvider:
+        async def complete(self, system, messages, max_tokens):
+            raise AssertionError("memory extraction should not run for ordinary general chat")
+
+    with TemporaryDirectory() as tmp:
+        memory = MemoryManager(Path(tmp), git_auto_commit=False)
+        agent = CoreAgent(memory)
+        ctx = memory.load_context("GENERAL")
+        with (
+            patch("app.agents.base.get_provider", return_value=FailingProvider()),
+            patch.object(CoreAgent, "_extract_story_bank_updates", return_value=[]),
+        ):
+            updates = await agent.post_process(
+                "That makes sense. We can talk through it step by step.",
+                "I'm feeling a little stuck this week and wanted to think out loud about my search.",
+                ctx,
+                history=[],
+            )
+
+    assert updates == []
+
+
+@pytest.mark.asyncio
+async def test_emotional_general_chat_does_not_trigger_memory_extraction():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+    from app.memory.manager import MemoryManager
+    from app.agents.base import CoreAgent
+
+    class FailingProvider:
+        async def complete(self, system, messages, max_tokens):
+            raise AssertionError("memory extraction should not run for emotional support chat")
+
+    with TemporaryDirectory() as tmp:
+        memory = MemoryManager(Path(tmp), git_auto_commit=False)
+        agent = CoreAgent(memory)
+        ctx = memory.load_context("GENERAL")
+        with (
+            patch("app.agents.base.get_provider", return_value=FailingProvider()),
+            patch.object(CoreAgent, "_extract_story_bank_updates", return_value=[]),
+        ):
+            updates = await agent.post_process(
+                "We can slow this down and make the week feel lighter.",
+                "找工过程中太容易burn out，我最近真的有点累。",
+                ctx,
+                history=[],
+            )
+
+    assert updates == []
+
+
+@pytest.mark.asyncio
 async def test_resume_post_process_strips_formatting_and_extracts_content():
     from pathlib import Path
     from tempfile import TemporaryDirectory
@@ -833,3 +891,11 @@ def test_agent_build_system_includes_planner_context(tmp_path):
 
     assert "## Their living planner" in system
     assert "Finish one application" in system
+
+
+def test_resume_intent_requires_explicit_resume_edit_request():
+    from app.agents.base import _resume_intent_is_explicit
+
+    assert _resume_intent_is_explicit("Please review and tailor my resume for OpenAI.")
+    assert not _resume_intent_is_explicit("I worked on RAG systems and multi-agent tooling at my last job.")
+    assert not _resume_intent_is_explicit("I am not sure how to talk about my background in chat.")
