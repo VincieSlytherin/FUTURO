@@ -142,6 +142,35 @@ class StorySearchResult(BaseModel):
     result_metric: str | None
 
 
+# ── Gap analysis ──────────────────────────────────────────────────────────────
+
+class GapAnalysisRequest(BaseModel):
+    jd_text: str | None = None
+    jd_url: str | None = None
+    rebuild_index: bool = False
+
+class RequirementCoverage(BaseModel):
+    requirement: str
+    matched_story_id: str | None = None
+    matched_story: str | None = None
+    distance: float | None = None
+    covered: bool = False
+
+class GapAnalysisResult(BaseModel):
+    jd_summary: str | None = None
+    jd_skills: list[str] = []
+    jd_requirements: list[str] = []
+    matched_skills: list[str] = []
+    missing_skills: list[str] = []
+    requirement_coverage: list[RequirementCoverage] = []
+    work_mode: str | None = None
+    sponsorship_detected: bool = False
+    overall_match_score: int
+    match_summary: str
+    weak_signals: list[str] = []
+    resume_edit_checklist: list[str] = []
+
+
 # ── Interviews ────────────────────────────────────────────────────────────────
 
 class InterviewCreate(BaseModel):

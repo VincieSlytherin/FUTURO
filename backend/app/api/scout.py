@@ -18,6 +18,7 @@ from sqlalchemy import select, func, desc, update, delete
 from app.deps import AuthDep, DbDep, MemoryDep
 from app.jd_parser import enrich_company_from_jd
 from app.models.db import ScoutConfig, ScoutRun, JobListing
+from app.scout_recommend import recommend
 from app.workers.job_monitor import register_config, unregister_config
 from app.agents.job_scout import is_config_running
 
@@ -313,6 +314,38 @@ async def get_job(job_id: int, _: AuthDep, db: DbDep):
     return _job_to_dict(job, full_description=True)
 
 
+# ── Recommendations ─────────────────────────────────────────────────────────────
+
+@router.get("/recommendations")
+async def recommendations(
+    _: AuthDep,
+    db: DbDep,
+    status: str = "NEW",
+    min_score: int = 55,
+    config_id: int | None = None,
+    limit: int = 20,
+):
+    """Prioritized application actions: scored jobs ranked by priority, then score."""
+    q = select(JobListing).where(JobListing.score.isnot(None))
+    if status != "ALL":
+        q = q.where(JobListing.status == status.upper())
+    if min_score:
+        q = q.where(JobListing.score >= min_score)
+    if config_id:
+        q = q.where(JobListing.config_id == config_id)
+    q = q.order_by(desc(JobListing.score))
+
+    result = await db.execute(q)
+    jobs = [_job_to_dict(j) for j in result.scalars().all()]
+    jobs.sort(key=lambda j: (j["recommendation"]["priority_rank"], j["score"] or 0), reverse=True)
+
+    return {
+        "recommendations": jobs[:limit],
+        "total_considered": len(jobs),
+        "min_score": min_score,
+    }
+
+
 # ── Stats ──────────────────────────────────────────────────────────────────────
 
 @router.get("/stats")
@@ -380,7 +413,7 @@ def _run_to_dict(r: ScoutRun) -> dict:
 
 
 def _job_to_dict(j: JobListing, full_description: bool = False) -> dict:
-    return {
+    data = {
         "id": j.id,
         "title": j.title,
         "company": j.company,
@@ -404,3 +437,5 @@ def _job_to_dict(j: JobListing, full_description: bool = False) -> dict:
         "discovered_at": j.discovered_at.isoformat(),
         "seen_at": j.seen_at.isoformat() if j.seen_at else None,
     }
+    data["recommendation"] = recommend(data)
+    return data

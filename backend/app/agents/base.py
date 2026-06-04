@@ -13,6 +13,7 @@ from typing import AsyncIterator
 from app.config import settings
 from app.custom_instructions import CustomInstructionManager
 from app.memory.manager import AgentContext, MemoryManager
+from app.memory.schema import MEMORY_SECTIONS
 from app.models.schemas import MemoryUpdate
 from app.providers.base import TaskType
 from app.providers.router import get_provider
@@ -27,47 +28,8 @@ def _load_prompt(name: str) -> str:
 
 BASE_PERSONA = _load_prompt("base_persona")
 
-MEMORY_TARGETS: dict[str, list[str]] = {
-    "L0_identity.md": [
-        "Who I am",
-        "Career narrative",
-        "Target role",
-        "Technical skills",
-        "Signature projects",
-    ],
-    "L1_campaign.md": [
-        "Status snapshot",
-        "Weekly focus",
-        "Mindset check",
-        "Strategy notes",
-    ],
-    "planner.md": [
-        "Daily tasks",
-        "Learning backlog",
-    ],
-    "L2_knowledge.md": [
-        "Job search strategy",
-        "Sourcing channels",
-        "Market intelligence",
-        "Interview prep learnings",
-        "Insights from content",
-        "Strategy iteration log",
-    ],
-    "stories_bank.md": [
-        "Quick-reference index",
-        "Coverage gaps",
-    ],
-    "resume_versions.md": [
-        "Current version: v1.0",
-        "Bullets",
-    ],
-    "interview_log.md": [
-        "Active interviews",
-        "Cross-company patterns",
-        "Questions that keep coming up",
-        "My blind spots",
-    ],
-}
+# Canonical file → allowed sections map lives in app.memory.schema (shared with the API).
+MEMORY_TARGETS = MEMORY_SECTIONS
 
 MEMORY_EXTRACTION_SYSTEM = """You extract durable user memory from a Futuro chat session.
 

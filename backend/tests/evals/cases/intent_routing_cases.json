@@ -1,0 +1,12 @@
+[
+  {"id": "ir-resume", "message": "Can you rewrite and tailor my resume for this OpenAI role?", "expected_intent": "RESUME"},
+  {"id": "ir-bq", "message": "Can we practice a behavioral question about handling conflict?", "expected_intent": "BQ"},
+  {"id": "ir-story", "message": "Help me turn my RAG platform project into a STAR story.", "expected_intent": "STORY"},
+  {"id": "ir-debrief", "message": "I just finished my onsite at Stripe and want to debrief it.", "expected_intent": "DEBRIEF"},
+  {"id": "ir-scout", "message": "Are there any new AI engineer job openings this week?", "expected_intent": "SCOUT"},
+  {"id": "ir-planner", "message": "Let's plan my tasks for this week and what to study next.", "expected_intent": "PLANNER"},
+  {"id": "ir-strategy", "message": "Can we review my overall job search strategy?", "expected_intent": "STRATEGY"},
+  {"id": "ir-intake", "message": "Here's a URL to an article I want you to process: https://example.com/post", "expected_intent": "INTAKE"},
+  {"id": "ir-general", "message": "Hey, I'm feeling a bit stuck this week and wanted to think out loud.", "expected_intent": "GENERAL"},
+  {"id": "ir-general-bg", "message": "I worked on RAG systems and multi-agent tooling at my last job.", "expected_intent": "GENERAL"}
+]

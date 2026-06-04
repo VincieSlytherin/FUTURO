@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.deps import AuthDep, MemoryDep
+from app.memory.schema import validate_update
 from app.models.schemas import MemoryWriteRequest, ApplyUpdateRequest, MemoryFileResponse
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
@@ -52,6 +53,26 @@ async def write_file(
     return {"ok": True, "committed": True}
 
 
+@router.post("/{filename}/preview-update")
+async def preview_update(
+    filename: str,
+    body: ApplyUpdateRequest,
+    _: AuthDep,
+    memory: MemoryDep,
+):
+    """Return the before/after/unified-diff a proposed update would produce, without writing."""
+    if filename not in ALLOWED_FILES:
+        raise HTTPException(status_code=404, detail="File not found")
+    ok, error = validate_update(filename, body.section, body.action, body.content)
+    preview = memory.preview_update(
+        filename=filename,
+        section=body.section,
+        action=body.action,
+        content=body.content,
+    )
+    return {**preview, "valid": ok, "error": error}
+
+
 @router.post("/{filename}/apply-update")
 async def apply_update(
     filename: str,
@@ -61,6 +82,9 @@ async def apply_update(
 ):
     if filename not in ALLOWED_FILES:
         raise HTTPException(status_code=404, detail="File not found")
+    ok, error = validate_update(filename, body.section, body.action, body.content)
+    if not ok:
+        raise HTTPException(status_code=422, detail=error)
     memory.apply_update(
         filename=filename,
         section=body.section,

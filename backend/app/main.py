@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
 from app.providers.router import init_providers
-from app.api import auth, chat, memory, campaign, stories, interviews, intake, scout, instructions, notifications, portfolio
+from app.api import auth, chat, memory, campaign, stories, interviews, intake, scout, instructions, notifications, portfolio, gap
 from app.api import providers as providers_api
 from app.workers.job_monitor import start_scheduler, stop_scheduler
 
@@ -52,6 +52,7 @@ app.include_router(scout.router)
 app.include_router(instructions.router)
 app.include_router(notifications.router)
 app.include_router(portfolio.router)
+app.include_router(gap.router)
 app.include_router(providers_api.router)
 
 

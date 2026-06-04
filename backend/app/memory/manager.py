@@ -178,6 +178,37 @@ class MemoryManager:
         if self.git_auto_commit:
             self._commit(filename, commit_msg)
 
+    def _compute_update(self, current: str, section: str, action: str, content: str) -> str:
+        """Pure transform: what `current` becomes after applying an update. No I/O."""
+        if action == "create":
+            return current.rstrip() + "\n\n---\n\n" + content + "\n"
+        if action == "replace":
+            return self._replace_section(current, section, content)
+        return self._append_to_section(current, section, content)
+
+    def preview_update(
+        self,
+        filename: str,
+        section: str,
+        action: str,
+        content: str,
+    ) -> dict:
+        """Compute before/after/unified-diff for a proposed update without writing it."""
+        import difflib
+
+        path = self.memory_dir / filename
+        before = path.read_text(encoding="utf-8") if path.exists() else ""
+        after = self._compute_update(before, section, action, content)
+        diff = "".join(
+            difflib.unified_diff(
+                before.splitlines(keepends=True),
+                after.splitlines(keepends=True),
+                fromfile=f"a/{filename}",
+                tofile=f"b/{filename}",
+            )
+        )
+        return {"before": before, "after": after, "diff": diff, "changed": before != after}
+
     def apply_update(
         self,
         filename: str,
@@ -188,13 +219,7 @@ class MemoryManager:
     ) -> None:
         path = self.memory_dir / filename
         current = path.read_text(encoding="utf-8") if path.exists() else ""
-
-        if action == "create":
-            updated = current.rstrip() + "\n\n---\n\n" + content + "\n"
-        elif action == "replace":
-            updated = self._replace_section(current, section, content)
-        else:  # append
-            updated = self._append_to_section(current, section, content)
+        updated = self._compute_update(current, section, action, content)
 
         path.write_text(updated, encoding="utf-8")
         if self.git_auto_commit:

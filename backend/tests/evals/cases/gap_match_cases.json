@@ -1,0 +1,18 @@
+[
+  {
+    "id": "gm-applied-ai",
+    "jd_text": "Applied AI Engineer\n\nRequirements\n- Strong Python and FastAPI experience\n- Experience deploying with Kubernetes and Terraform\n- Familiarity with LangChain and vector databases\n- Build production RAG pipelines",
+    "identity": "## Technical skills\n- Python, FastAPI, RAG, LangChain, AWS",
+    "resume": "### Bullets\n- Built a production RAG platform on AWS with Python and FastAPI.\n- Architected a LangChain agent pipeline with semantic retrieval.",
+    "expected_matched": ["Python", "FastAPI", "LangChain", "RAG"],
+    "expected_missing": ["Kubernetes", "Terraform"]
+  },
+  {
+    "id": "gm-data-eng",
+    "jd_text": "Data Engineer\n\nRequirements\n- Expert SQL and Spark\n- Experience with Airflow and Databricks\n- Docker and AWS deployment",
+    "identity": "## Technical skills\n- SQL, Python, AWS, Docker",
+    "resume": "### Bullets\n- Built SQL data marts and Dockerized ETL jobs on AWS.",
+    "expected_matched": ["SQL", "AWS", "Docker"],
+    "expected_missing": ["Spark", "Airflow", "Databricks"]
+  }
+]

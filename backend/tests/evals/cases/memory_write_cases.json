@@ -1,0 +1,14 @@
+[
+  {"id": "mw-resume-tailor", "intent": "RESUME", "message": "Please tailor my resume for the OpenAI applied AI engineer role.", "expected_extract": true},
+  {"id": "mw-bq-story", "intent": "BQ", "message": "Here is my STAR story about leading the RAG platform migration at RGA.", "expected_extract": true},
+  {"id": "mw-applied", "intent": "GENERAL", "message": "I applied to Anthropic for the AI Engineer role yesterday.", "expected_extract": true},
+  {"id": "mw-target-role", "intent": "GENERAL", "message": "My target role is Applied AI Engineer in the Bay Area.", "expected_extract": true},
+  {"id": "mw-planner-task", "intent": "PLANNER", "message": "I want to add a task to tailor the Stripe resume this week.", "expected_extract": true},
+  {"id": "mw-explicit-save", "intent": "GENERAL", "message": "Remember this: I prefer remote-friendly teams and want to avoid ad-tech.", "expected_extract": true},
+  {"id": "mw-strategy-prefs", "intent": "STRATEGY", "message": "I'm looking for applied AI roles and prefer healthcare or fintech.", "expected_extract": true},
+  {"id": "mw-chitchat", "intent": "GENERAL", "message": "Thanks, that makes sense. Let's keep going.", "expected_extract": false},
+  {"id": "mw-emotional", "intent": "GENERAL", "message": "I'm feeling really overwhelmed and burnt out this week.", "expected_extract": false},
+  {"id": "mw-open-question", "intent": "GENERAL", "message": "What do you think I should work on next?", "expected_extract": false},
+  {"id": "mw-strategy-greeting", "intent": "STRATEGY", "message": "Hey, how are you doing today?", "expected_extract": false},
+  {"id": "mw-emotional-zh", "intent": "GENERAL", "message": "找工过程中太容易burn out了，我最近真的有点累。", "expected_extract": false}
+]

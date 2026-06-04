@@ -29,7 +29,9 @@ This README is written as a practical setup guide. If you follow it top to botto
 ## Main features
 
 - Persistent memory stored in Markdown and versioned with Git
+- Memory governance: schema-validated updates with a before/after diff preview before anything is written
 - AI chat with intent routing for intake, stories, resume help, BQ practice, debrief, strategy, planning, and scouting
+- JD-to-resume gap analysis: matched vs. missing skills, STAR-story coverage, and a targeted resume-edit checklist
 - Company pipeline tracking
 - Planner with memory-backed daily tasks and learning backlog checklists
 - Story bank with structured STAR details and local vector search
@@ -40,6 +42,8 @@ This README is written as a practical setup guide. If you follow it top to botto
 - Settings UI for provider selection, model pulling, and Ollama-first routing
 - Settings UI for per-function custom instructions
 - Job Scout progress cards with run status and stage updates
+- Job Scout recommendations that turn scored listings into prioritized application actions
+- Evaluation harness for intent routing, memory-write decisions, story retrieval, and JD matching
 
 ## Tech stack
 
@@ -371,6 +375,29 @@ For the best results when building the story bank, give Futuro the real story de
 
 If you only give a one-line summary, Futuro can save the skeleton, but it cannot invent the missing specifics for you.
 
+## Memory governance: validation and diff preview
+
+Memory updates are inspectable and schema-validated before anything is written.
+
+Current behavior:
+
+- the allowed files and sections are defined in one place (`backend/app/memory/schema.py`) and shared by both the chat memory-extraction path and the memory API, so a proposal the agent makes is exactly what the API will accept
+- `POST /api/memory/{file}/apply-update` rejects an unknown file, an out-of-schema section, a bad action, or empty content with a `422` instead of silently writing it
+- `POST /api/memory/{file}/preview-update` returns the `before`, `after`, and a unified `diff` for a proposed update without touching disk, so the UI can show a real before/after
+- every applied update is still committed to the memory Git history with its reason, so you can review and roll back
+
+## JD-to-resume gap analysis
+
+Paste a job description (or a URL) and Futuro tells you how your resume and stories line up against it.
+
+`POST /api/gap/analyze` with `{"jd_text": "..."}` or `{"jd_url": "..."}` returns:
+
+- `matched_skills` and `missing_skills` — JD skills checked against your `L0_identity.md` and `resume_versions.md`
+- `requirement_coverage` — for each JD requirement, the closest STAR story from your story bank (semantic retrieval over ChromaDB)
+- `overall_match_score`, `weak_signals`, and a `resume_edit_checklist` of concrete, prioritized edits
+
+The skill matching and story coverage are deterministic and run offline. The score, weak-signal detection, and checklist use the configured `SCORE` provider, and fall back to a deterministic checklist when no provider is available — so the endpoint always returns a usable report.
+
 ## Start the app
 
 Open two terminals.
@@ -487,6 +514,38 @@ You should see:
 
 This makes it much easier to tell whether a scout is actually working or stuck.
 
+## Job Scout recommendations
+
+Beyond scoring each listing, Futuro turns scored jobs into prioritized application actions.
+
+Current behavior:
+
+- every job carries a `recommendation` with a `priority` (`HIGH` / `MEDIUM` / `LOW`), a `recommended_action`, and the `reasons` behind it
+- recommendations are derived deterministically from data already on the listing (fit score, sponsorship signal, pros/cons) — no extra LLM call and no database migration
+- high-fit roles suggest applying and asking for a referral; mid-fit roles with an unknown sponsorship signal are flagged to verify sponsorship first
+- `GET /api/scout/recommendations` returns your top NEW listings ranked by priority, then score, so you get an ordered "what to do next" list instead of a raw feed
+
+## Evaluation harness
+
+Futuro includes an eval harness so agent-quality changes can be checked for regressions, not just unit-tested.
+
+It lives in `backend/tests/evals/` with JSON case files and a pytest runner, and on each run it writes a JSON and Markdown report to `backend/tests/evals/reports/`.
+
+Suites and metrics:
+
+- `memory_write` — precision / recall / F1 of the memory-write decision (deterministic)
+- `story_retrieval` — precision@1, recall@3, and MRR over a seeded story index using local embeddings (deterministic)
+- `gap_matching` — precision / recall / F1 of JD-to-resume skill matching (deterministic)
+- `intent_routing` — accuracy of intent classification (needs a live provider; opt in with `FUTURO_EVAL_LIVE=1`)
+
+Each suite is checked against a regression floor. Run it with:
+
+```bash
+cd backend
+python -m pytest tests/test_evals.py -q          # deterministic suites
+FUTURO_EVAL_LIVE=1 python -m pytest tests/test_evals.py -q   # also run intent routing
+```
+
 ## What you can do before LLM setup
 
 Even without Claude or Ollama configured, you can still:
@@ -573,6 +632,10 @@ If Ollama is unavailable and Claude is configured, `Auto` will fall back to Clau
 - `backend/app/config.py`
 - `backend/app/api/auth.py`
 - `backend/app/providers/router.py`
+- `backend/app/gap_analysis.py`
+- `backend/app/memory/schema.py`
+- `backend/app/scout_recommend.py`
+- `backend/tests/evals/run_evals.py`
 - `frontend/src/components/shared/ProviderStatus.tsx`
 - `docs/DEV_SETUP.md`
 
