@@ -125,6 +125,7 @@ class ScoutConfig(Base):
     min_score: Mapped[int] = mapped_column(Integer, default=60)          # only surface jobs ≥ this score
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     schedule_hours: Mapped[int] = mapped_column(Integer, default=12)     # re-scan every N hours
+    company_size: Mapped[str | None] = mapped_column(String(50), default=None)  # None=any, "enterprise"=1000+
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -166,6 +167,7 @@ class JobListing(Base):
     description_snippet: Mapped[str | None] = mapped_column(Text)       # 300 chars for display
     site: Mapped[str] = mapped_column(String(50))                       # linkedin / indeed / etc
     date_posted: Mapped[str | None] = mapped_column(String(50))
+    company_num_employees: Mapped[str | None] = mapped_column(String(100))
     job_type: Mapped[str | None] = mapped_column(String(100))           # full-time / contract
     # Scout metadata
     config_id: Mapped[int | None] = mapped_column(ForeignKey("scout_configs.id"))

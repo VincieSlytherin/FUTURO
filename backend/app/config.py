@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # Anthropic
     anthropic_api_key: str
-    claude_model: str = "claude-sonnet-4-5"
+    claude_model: str = "claude-sonnet-4-6"
     max_tokens: int = 8192
 
     # Auth

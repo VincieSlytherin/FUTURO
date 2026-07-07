@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
 
 from app.memory.manager import MemoryManager
@@ -119,6 +120,7 @@ def _scrape_jobs(
                 "site": str(row.get("site", "")),
                 "date_posted": str(row.get("date_posted", "") or ""),
                 "job_type": str(row.get("job_type", "") or ""),
+                "company_num_employees": str(row.get("company_num_employees", "") or ""),
             })
         return jobs
 
@@ -135,6 +137,19 @@ def _safe_float(val) -> float | None:
         return float(val) if val is not None and str(val) not in ("", "nan", "None") else None
     except (ValueError, TypeError):
         return None
+
+
+def _is_enterprise(emp_str: str | None) -> bool:
+    """True if company has ≥1000 employees based on jobspy's employee count string."""
+    if not emp_str:
+        return False
+    match = re.search(r"[\d,]+", emp_str)
+    if not match:
+        return False
+    try:
+        return int(match.group().replace(",", "")) >= 1000
+    except ValueError:
+        return False
 
 
 def _mock_jobs(search_term: str, location: str) -> list[dict]:
@@ -258,6 +273,7 @@ async def run_scout(
     min_score: int,
     memory: MemoryManager,
     db_session,  # AsyncSession
+    company_size: str | None = None,  # None=any, "enterprise"=≥1000 employees
 ) -> dict:
     """
     Full scout run:
@@ -289,6 +305,9 @@ async def run_scout(
         await _update_run_progress(run_id, error_msg="Scraping job boards...")
 
         raw_jobs = _scrape_jobs(search_term, location, sites, results_wanted, hours_old, distance, is_remote)
+        if company_size == "enterprise":
+            raw_jobs = [j for j in raw_jobs if _is_enterprise(j.get("company_num_employees"))]
+            logger.info(f"[scout:{config_id}] enterprise filter applied — {len(raw_jobs)} listings remain")
         logger.info(f"[scout:{config_id}] scraped {len(raw_jobs)} listings")
         await _update_run_progress(
             run_id,
@@ -359,6 +378,7 @@ async def run_scout(
                 site=job.get("site", ""),
                 date_posted=job.get("date_posted"),
                 job_type=job.get("job_type"),
+                company_num_employees=job.get("company_num_employees") or None,
                 config_id=config_id,
                 run_id=run_id,
                 score=scoring["score"],

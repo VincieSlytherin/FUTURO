@@ -15,6 +15,7 @@ export interface ScoutConfig {
   min_score: number;
   schedule_hours: number;
   is_active: boolean;
+  company_size: string | null;
   last_run_at: string | null;
   created_at: string;
 }
@@ -33,6 +34,7 @@ export interface JobListing {
   date_posted: string | null;
   job_type: string | null;
   job_url: string;
+  company_num_employees: string | null;
   score: number | null;
   score_summary: string | null;
   score_pros: string[];

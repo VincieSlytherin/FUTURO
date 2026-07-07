@@ -100,6 +100,11 @@ function JobCard({
                 </a>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <span className="text-sm text-gray-600">{job.company}</span>
+                  {job.company_num_employees && (
+                    <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">
+                      {job.company_num_employees}
+                    </span>
+                  )}
                   <span className="text-gray-300">·</span>
                   <span className="text-xs text-gray-400">{job.location || "Location not listed"}</span>
                   {job.is_remote && (
@@ -266,8 +271,11 @@ function ConfigCard({
               config.is_active ? "bg-green-500" : "bg-gray-400")}/>
             <span className="font-medium text-gray-900 truncate">{config.name}</span>
           </div>
-          <p className="text-xs text-gray-500 mt-0.5 pl-3.5">
+          <p className="text-xs text-gray-500 mt-0.5 pl-3.5 flex items-center gap-1.5 flex-wrap">
             "{config.search_term}" · {config.location} · every {config.schedule_hours}h
+            {config.company_size === "enterprise" && (
+              <span className="bg-indigo-100 text-indigo-700 text-[10px] font-medium px-1.5 py-0.5 rounded">Enterprise</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -381,6 +389,7 @@ function AddConfigModal({ onAdd, onClose }: { onAdd: (c: ScoutConfig) => void; o
     distance_miles: 50, sites: "linkedin,indeed,glassdoor",
     results_wanted: 25, hours_old: 72, is_remote: null as boolean | null,
     min_score: 60, schedule_hours: 12, is_active: true,
+    company_size: null as string | null,
   });
   const [saving, setSaving] = useState(false);
 
@@ -456,6 +465,25 @@ function AddConfigModal({ onAdd, onClose }: { onAdd: (c: ScoutConfig) => void; o
                 </button>
               ))}
             </div>
+          </div>
+          <div>
+            <label className="label">Company size</label>
+            <div className="flex gap-2">
+              {([["Any", null], ["Enterprise (1000+)", "enterprise"]] as const).map(([label, val]) => (
+                <button key={label} type="button" onClick={() => set("company_size", val)}
+                  className={clsx("px-3 py-1.5 rounded-lg text-xs border transition-colors",
+                    form.company_size === val
+                      ? "bg-futuro-500 text-white border-futuro-500"
+                      : "border-gray-200 text-gray-600 hover:border-gray-300")}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {form.company_size === "enterprise" && (
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                Only LinkedIn/Indeed jobs with ≥1000 employees will be surfaced.
+              </p>
+            )}
           </div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={saving || !form.name || !form.search_term}

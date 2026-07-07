@@ -38,6 +38,7 @@ class ScoutConfigCreate(BaseModel):
     is_remote: bool | None = None
     min_score: int = Field(default=60, ge=0, le=100)
     schedule_hours: int = Field(default=12, ge=1, le=168)
+    company_size: str | None = None                   # None=any, "enterprise"=1000+ employees
 
 
 class ScoutConfigUpdate(BaseModel):
@@ -52,6 +53,7 @@ class ScoutConfigUpdate(BaseModel):
     min_score: int | None = None
     schedule_hours: int | None = None
     is_active: bool | None = None
+    company_size: str | None = None
 
 
 class JobActionRequest(BaseModel):
@@ -175,6 +177,7 @@ async def manual_run(
             distance=config.distance_miles,
             is_remote=config.is_remote,
             min_score=config.min_score,
+            company_size=config.company_size,
             memory=memory,
             db_session=None,
         )
@@ -393,6 +396,7 @@ def _config_to_dict(c: ScoutConfig) -> dict:
         "min_score": c.min_score,
         "schedule_hours": c.schedule_hours,
         "is_active": c.is_active,
+        "company_size": c.company_size,
         "last_run_at": c.last_run_at.isoformat() if c.last_run_at else None,
         "created_at": c.created_at.isoformat(),
     }
@@ -426,6 +430,7 @@ def _job_to_dict(j: JobListing, full_description: bool = False) -> dict:
         "site": j.site,
         "date_posted": j.date_posted,
         "job_type": j.job_type,
+        "company_num_employees": j.company_num_employees,
         "job_url": j.job_url,
         "score": j.score,
         "score_summary": j.score_summary,

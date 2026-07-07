@@ -47,6 +47,7 @@ async def _run_config(config_id: int) -> None:
             distance=config.distance_miles,
             is_remote=config.is_remote,
             min_score=config.min_score,
+            company_size=config.company_size,
             memory=memory,
             db_session=None,  # run_scout manages its own sessions
         )
